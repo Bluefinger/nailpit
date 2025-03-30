@@ -1,0 +1,142 @@
+mod pit;
+mod rng;
+mod shutdown;
+mod state;
+mod stream_body;
+
+use std::{
+    net::SocketAddr,
+    sync::Arc,
+    time::{Duration, Instant},
+};
+
+use axum::{Router, extract::ConnectInfo, response::Html, routing::get};
+use color_eyre::Result;
+use futures_concurrency::future::Race;
+use logforth::append;
+use logforth::filter::EnvFilter;
+use rand_core::RngCore;
+use rng::FastRng;
+use shutdown::{shutdown_task, wait_for_shutdown};
+use state::{ServerState, track_incoming_sources};
+use tokio::time::interval_at;
+use tower::ServiceBuilder;
+
+static INDEX: &str = include_str!("../templates/warning.html");
+
+const SOURCE_TIMEOUT: Duration = Duration::from_secs(60 * 2);
+
+#[fastrace::trace]
+async fn handler(source: ConnectInfo<SocketAddr>) -> Html<&'static str> {
+    log::info!("Into the tarpit, {}", source.ip());
+
+    Html(INDEX)
+}
+
+#[fastrace::trace]
+async fn generated(source: ConnectInfo<SocketAddr>) -> Html<String> {
+    Html(format!("<p>OH HI {} - {}</p>", source.ip(), FastRng::default().next_u32()))
+}
+
+
+#[fastrace::trace]
+async fn nailpit_cleanup(state: ServerState) {
+    let tick_interval = Duration::from_secs(60 * 5);
+    let mut tick = interval_at((Instant::now() + tick_interval).into(), tick_interval);
+    loop {
+        tick.tick().await;
+
+        if state.sources.len() > 64 {
+            tokio::task::block_in_place(|| {
+                state
+                    .sources
+                    .retain(|_, v| v.last_seen.elapsed() >= SOURCE_TIMEOUT)
+            });
+
+            log::info!("pit cleaned of corpses");
+        }
+    }
+}
+
+async fn nailpit_main() -> Result<()> {
+    let (shutdown_notifier, shutdown_signal) = tokio::sync::watch::channel(());
+    let shutdown_notifier = Arc::new(shutdown_notifier);
+    let state = ServerState::default();
+
+    tokio::spawn(
+        (
+            wait_for_shutdown(shutdown_notifier.clone()),
+            nailpit_cleanup(state.clone()),
+        )
+            .race(),
+    );
+
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
+
+    log::info!("listening on http://{}", listener.local_addr()?);
+
+    let task = async move {
+        let app = Router::new()
+            .route("/", get(handler))
+            .fallback(get(generated))
+            .layer(
+                ServiceBuilder::new()
+                    .layer(fastrace_axum::FastraceLayer)
+                    .layer(axum::middleware::from_fn_with_state(
+                        state.clone(),
+                        track_incoming_sources,
+                    )),
+            )
+            .with_state(state);
+
+        tokio::spawn(
+            axum::serve(
+                listener,
+                app.into_make_service_with_connect_info::<SocketAddr>(),
+            )
+            .with_graceful_shutdown(wait_for_shutdown(shutdown_notifier))
+            .into_future(),
+        )
+        .await??;
+
+        Ok(())
+    };
+
+    (task, shutdown_task(shutdown_signal)).race().await?;
+
+    Ok(())
+}
+
+fn main() -> Result<()> {
+    color_eyre::install()?;
+
+    logforth::builder()
+        .dispatch(|d| {
+            d.filter(EnvFilter::from_default_env())
+                .diagnostic(logforth::diagnostic::FastraceDiagnostic::default())
+                .append(logforth::append::FastraceEvent::default())
+                .append(append::Stderr::default())
+        })
+        .apply();
+
+    fastrace::set_reporter(
+        fastrace::collector::ConsoleReporter,
+        fastrace::collector::Config::default(),
+    );
+
+    log::info!("Welcome to Nailpit!");
+
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(std::thread::available_parallelism()?.get().min(4))
+        .enable_all()
+        .build()?;
+
+    rt.block_on(nailpit_main())?;
+
+    // Wait at most 30 seconds for remaining background tasks to complete
+    rt.shutdown_timeout(Duration::from_secs(30));
+
+    fastrace::flush();
+
+    Ok(())
+}
