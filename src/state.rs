@@ -10,17 +10,17 @@ use axum::{
     middleware::Next,
     response::Response,
 };
-use dashmap::DashMap;
 use hyper::StatusCode;
+use scc::HashMap;
 use wyrand::RandomWyHashState;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SourceState {
     visited: usize,
     pub last_seen: Instant,
 }
 
-type ShardedSources = Arc<DashMap<IpAddr, SourceState, RandomWyHashState>>;
+type ShardedSources = Arc<HashMap<IpAddr, SourceState, RandomWyHashState>>;
 
 #[derive(Debug, Clone)]
 pub struct SourceMap(ShardedSources);
@@ -61,9 +61,10 @@ impl ServerState {
 
 impl Default for ServerState {
     fn default() -> Self {
-        Self::new(Arc::new(
-            DashMap::with_capacity_and_hasher_and_shard_amount(128, RandomWyHashState::new(), 32),
-        ))
+        Self::new(Arc::new(HashMap::with_capacity_and_hasher(
+            128,
+            RandomWyHashState::new(),
+        )))
     }
 }
 
@@ -98,7 +99,8 @@ pub async fn track_incoming_sources(
     next: Next,
 ) -> Result<Response, StatusCode> {
     let seen = sources
-        .entry(source.ip())
+        .entry_async(source.ip())
+        .await
         .and_modify(|source| {
             source.visited += 1;
             source.last_seen = Instant::now()

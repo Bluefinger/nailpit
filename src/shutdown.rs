@@ -18,6 +18,8 @@ pub async fn shutdown_task(notifier: Receiver<()>) -> Result<()> {
 
     (signal::ctrl_c(), sigterm).race().await?;
 
+    log::info!("Shutdown signal received, finishing...");
+
     drop(notifier);
 
     Ok(())

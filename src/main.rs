@@ -1,8 +1,9 @@
+mod body_stream;
+mod markov;
 mod pit;
 mod rng;
 mod shutdown;
 mod state;
-mod stream_body;
 
 use std::{
     net::SocketAddr,
@@ -10,9 +11,13 @@ use std::{
     time::{Duration, Instant},
 };
 
-use axum::{Router, extract::ConnectInfo, response::Html, routing::get};
+use axum::{
+    BoxError, Router, error_handling::HandleErrorLayer, extract::ConnectInfo, response::Html,
+    routing::get,
+};
 use color_eyre::Result;
 use futures_concurrency::future::Race;
+use hyper::StatusCode;
 use logforth::append;
 use logforth::filter::EnvFilter;
 use rand_core::RngCore;
@@ -20,7 +25,7 @@ use rng::FastRng;
 use shutdown::{shutdown_task, wait_for_shutdown};
 use state::{ServerState, track_incoming_sources};
 use tokio::time::interval_at;
-use tower::ServiceBuilder;
+use tower::{ServiceBuilder, buffer::BufferLayer, limit::RateLimitLayer};
 
 static INDEX: &str = include_str!("../templates/warning.html");
 
@@ -35,9 +40,12 @@ async fn handler(source: ConnectInfo<SocketAddr>) -> Html<&'static str> {
 
 #[fastrace::trace]
 async fn generated(source: ConnectInfo<SocketAddr>) -> Html<String> {
-    Html(format!("<p>OH HI {} - {}</p>", source.ip(), FastRng::default().next_u32()))
+    Html(format!(
+        "<p>OH HI {} - {}</p>",
+        source.ip(),
+        FastRng::default().next_u32()
+    ))
 }
-
 
 #[fastrace::trace]
 async fn nailpit_cleanup(state: ServerState) {
@@ -47,15 +55,56 @@ async fn nailpit_cleanup(state: ServerState) {
         tick.tick().await;
 
         if state.sources.len() > 64 {
-            tokio::task::block_in_place(|| {
-                state
-                    .sources
-                    .retain(|_, v| v.last_seen.elapsed() >= SOURCE_TIMEOUT)
-            });
+            state
+                .sources
+                .retain_async(|_, v| v.last_seen.elapsed() >= SOURCE_TIMEOUT)
+                .await;
 
             log::info!("pit cleaned of corpses");
         }
     }
+}
+
+async fn nailpit_axum(
+    state: ServerState,
+    shutdown_notifier: Arc<tokio::sync::watch::Sender<()>>,
+) -> Result<()> {
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
+
+    log::info!("listening on http://{}", listener.local_addr()?);
+
+    let app = Router::new()
+        .route("/", get(handler))
+        .fallback(get(generated))
+        .layer(
+            ServiceBuilder::new()
+                .layer(fastrace_axum::FastraceLayer)
+                .layer(HandleErrorLayer::new(|err: BoxError| async move {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Unhandled Error: {err}"),
+                    )
+                }))
+                .layer(BufferLayer::new(1024))
+                .layer(RateLimitLayer::new(1000, Duration::from_secs(60 * 5)))
+                .layer(axum::middleware::from_fn_with_state(
+                    state.clone(),
+                    track_incoming_sources,
+                )),
+        )
+        .with_state(state);
+
+    tokio::spawn(
+        axum::serve(
+            listener,
+            app.into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .with_graceful_shutdown(wait_for_shutdown(shutdown_notifier))
+        .into_future(),
+    )
+    .await??;
+
+    Ok(())
 }
 
 async fn nailpit_main() -> Result<()> {
@@ -71,38 +120,12 @@ async fn nailpit_main() -> Result<()> {
             .race(),
     );
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
-
-    log::info!("listening on http://{}", listener.local_addr()?);
-
-    let task = async move {
-        let app = Router::new()
-            .route("/", get(handler))
-            .fallback(get(generated))
-            .layer(
-                ServiceBuilder::new()
-                    .layer(fastrace_axum::FastraceLayer)
-                    .layer(axum::middleware::from_fn_with_state(
-                        state.clone(),
-                        track_incoming_sources,
-                    )),
-            )
-            .with_state(state);
-
-        tokio::spawn(
-            axum::serve(
-                listener,
-                app.into_make_service_with_connect_info::<SocketAddr>(),
-            )
-            .with_graceful_shutdown(wait_for_shutdown(shutdown_notifier))
-            .into_future(),
-        )
-        .await??;
-
-        Ok(())
-    };
-
-    (task, shutdown_task(shutdown_signal)).race().await?;
+    (
+        nailpit_axum(state, shutdown_notifier),
+        shutdown_task(shutdown_signal),
+    )
+        .race()
+        .await?;
 
     Ok(())
 }

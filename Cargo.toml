@@ -28,10 +28,12 @@ fastrace = { version = "0.7.9", features = ["enable"] }
 fastrace-axum = "0.1.0"
 logforth = { version = "0.23.1", features = ["fastrace"] }
 dashmap = "6.1.0"
-tower = "0.5.2"
+tower = { version = "0.5.2", features = ["buffer", "limit"]}
 futures-concurrency = "7.6.3"
 bytes = "1.10.1"
 futures-lite = "2.6.0"
+markovish = "0.2.2"
+scc = "2.3.3"
 
 [profile.release]
 codegen-units = 1
