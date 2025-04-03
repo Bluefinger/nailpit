@@ -7,21 +7,25 @@ mod state;
 
 use std::{
     net::SocketAddr,
-    sync::Arc,
+    sync::{Arc, LazyLock},
     time::{Duration, Instant},
 };
 
 use axum::{
-    BoxError, Router, error_handling::HandleErrorLayer, extract::ConnectInfo, response::Html,
+    BoxError, Router,
+    error_handling::HandleErrorLayer,
+    extract::ConnectInfo,
+    http::HeaderValue,
+    response::{Html, IntoResponse},
     routing::get,
 };
+use body_stream::BodyStream;
 use color_eyre::Result;
 use futures_concurrency::future::Race;
-use hyper::StatusCode;
+use hyper::{HeaderMap, StatusCode, header::CONTENT_TYPE};
 use logforth::append;
 use logforth::filter::EnvFilter;
-use rand_core::RngCore;
-use rng::FastRng;
+use markov::MarkovGen;
 use shutdown::{shutdown_task, wait_for_shutdown};
 use state::{ServerState, track_incoming_sources};
 use tokio::time::interval_at;
@@ -31,6 +35,15 @@ static INDEX: &str = include_str!("../templates/warning.html");
 
 const SOURCE_TIMEOUT: Duration = Duration::from_secs(60 * 2);
 
+static GEN_HEADER: LazyLock<HeaderMap> = LazyLock::new(|| {
+    let mut headers = HeaderMap::new();
+    headers.append(
+        CONTENT_TYPE,
+        HeaderValue::from_static("text/html; charset=utf-8"),
+    );
+    headers
+});
+
 #[fastrace::trace]
 async fn handler(source: ConnectInfo<SocketAddr>) -> Html<&'static str> {
     log::info!("Into the tarpit, {}", source.ip());
@@ -39,12 +52,13 @@ async fn handler(source: ConnectInfo<SocketAddr>) -> Html<&'static str> {
 }
 
 #[fastrace::trace]
-async fn generated(source: ConnectInfo<SocketAddr>) -> Html<String> {
-    Html(format!(
-        "<p>OH HI {} - {}</p>",
-        source.ip(),
-        FastRng::default().next_u32()
-    ))
+async fn generated() -> impl IntoResponse {
+    BodyStream::from_stream(
+        MarkovGen::new(256, "./input/first.txt")
+            .unwrap()
+            .into_stream(),
+    )
+    .headers(GEN_HEADER.clone())
 }
 
 #[fastrace::trace]
