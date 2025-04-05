@@ -1,19 +1,28 @@
-//! At the heart of a [`Chain`](crate::Chain) is a [`Token`]. In fact, this is just a String. But we make a
-//! distinction here: A Token is any atomic piece of text.
-//!
-//! When using [`ChainBuilder::feed_str()`](crate::chain::ChainBuilder::feed_str()),
-//! it is the output of [`unicode_segmentation::UnicodeSegmentation::split_word_bounds()`]; that is,
-//! it can be a word, a symbol like `"`, or something else. See that crate for more information.
-//!
-//! If you want more control of what you want a token to be, you can use
-//! [`ChainBuilder::feed_tokens()`](crate::chain::ChainBuilder::feed_tokens()).
+use std::ops::Deref;
 
 use hashbrown::Equivalent;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 /// Representation of a string segment.
-pub type Token = String;
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[repr(transparent)]
+pub struct Token(Box<str>);
+
+impl From<&str> for Token {
+    fn from(value: &str) -> Self {
+        Self(value.into())
+    }
+}
+
+impl Deref for Token {
+    type Target = Box<str>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 /// An owned pair of [`Token`]s.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -28,25 +37,31 @@ pub type TokenPairRef<'a> = (TokenRef<'a>, TokenRef<'a>);
 
 impl TokenPair {
     pub fn new(left: &str, right: &str) -> Self {
-        Self(left.to_string(), right.to_string())
+        Self(left.into(), right.into())
     }
 }
 
 impl From<&TokenPairRef<'_>> for TokenPair {
     fn from(value: &TokenPairRef) -> Self {
-        Self(value.0.to_string(), value.1.to_string())
+        Self(value.0.into(), value.1.into())
+    }
+}
+
+impl<'a> AsRef<TokenPair> for TokenPair {
+    fn as_ref(&self) -> &TokenPair {
+        self
     }
 }
 
 impl TokenPair {
-    pub fn as_ref(&self) -> TokenPairRef<'_> {
+    pub fn as_token_pair_ref(&self) -> TokenPairRef<'_> {
         (&self.0, &self.1)
     }
 }
 
 impl PartialEq<&TokenPairRef<'_>> for TokenPair {
     fn eq(&self, other: &&TokenPairRef<'_>) -> bool {
-        self.0 == *other.0 && self.1 == *other.1
+        self.0.as_ref() == other.0 && self.1.as_ref() == other.1
     }
 }
 
@@ -65,6 +80,12 @@ impl Equivalent<TokenPair> for &TokenPairRef<'_> {
 impl Equivalent<TokenPair> for TokenPairRef<'_> {
     fn equivalent(&self, key: &TokenPair) -> bool {
         key.eq(self)
+    }
+}
+
+impl Equivalent<Token> for str {
+    fn equivalent(&self, key: &Token) -> bool {
+        key.as_ref() == self
     }
 }
 

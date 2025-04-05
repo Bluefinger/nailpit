@@ -6,7 +6,7 @@ use itertools::Itertools;
 use rand::{RngCore, seq::IteratorRandom};
 use std::hash::BuildHasher;
 
-use distribution::{TokenDistribution, TokenDistributionBuilder};
+use distribution::{TokenWeights, TokenWeightsBuilder};
 use token::{TokenPair, TokenPairRef, TokenRef};
 use unicode_segmentation::UnicodeSegmentation;
 use wyrand::RandomWyHashState;
@@ -14,7 +14,7 @@ use wyrand::RandomWyHashState;
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct NailKov<S = RandomWyHashState> {
-    chain: HashMap<TokenPair, TokenDistribution, S>,
+    chain: HashMap<TokenPair, TokenWeights, S>,
 }
 
 pub struct NailKovIter<'a, R: RngCore, S = RandomWyHashState> {
@@ -43,8 +43,7 @@ impl<S: BuildHasher> NailKov<S> {
     ) -> Option<TokenRef<'_>> {
         self.chain
             .get(prev)
-            .map(|dist| dist.sample_token(rng))
-            .map(String::as_str)
+            .map(|dist| dist.sample_token(rng).as_ref())
     }
 
     pub fn generate_tokens<'a, R: RngCore>(
@@ -52,6 +51,7 @@ impl<S: BuildHasher> NailKov<S> {
         rng: &'a mut R,
     ) -> impl Iterator<Item = &'a str> {
         self.starting_token_pair(rng)
+            .map(TokenPair::as_token_pair_ref)
             .map(|prev| NailKovIter {
                 prev,
                 rng,
@@ -65,8 +65,8 @@ impl<S: BuildHasher> NailKov<S> {
         self.chain.keys()
     }
 
-    fn starting_token_pair(&self, rng: &mut impl RngCore) -> Option<TokenPairRef<'_>> {
-        self.pairs().choose(rng).map(|pair| pair.as_ref())
+    fn starting_token_pair(&self, rng: &mut impl RngCore) -> Option<&TokenPair> {
+        self.pairs().choose(rng)
     }
 }
 
@@ -89,41 +89,40 @@ impl<S: BuildHasher + Clone + Default> NailKov<S> {
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct NailBuilder<S = RandomWyHashState> {
-    map: HashMap<TokenPair, TokenDistributionBuilder<S>, S>,
+    chain: HashMap<TokenPair, TokenWeightsBuilder<S>, S>,
 }
 
 impl<S: BuildHasher + Clone + Default> NailBuilder<S> {
     pub fn new(hasher: S) -> Self {
         Self {
-            map: HashMap::with_hasher(hasher),
+            chain: HashMap::with_hasher(hasher),
         }
     }
 
     pub fn build(self) -> Option<NailKov<S>> {
-        if self.map.is_empty() {
+        if self.chain.is_empty() {
             return None;
         }
 
-        let chain_map = self
-            .map
+        let chain = self
+            .chain
             .into_iter()
             .flat_map(|(pair, dist)| dist.build().map(|build| (pair, build)))
             .collect();
 
-        Some(NailKov { chain: chain_map })
+        Some(NailKov { chain })
     }
 
     /// Add the occurrence of `next` following `prev`.
     pub fn add_token_pair(&mut self, prev: TokenPairRef<'_>, next: &str) {
-        match self.map.get_mut(&prev) {
-            Some(b) => {
-                b.add(next);
+        match self.chain.get_mut(&prev) {
+            Some(builder) => {
+                builder.add(next);
             }
             None => {
-                let mut b = TokenDistributionBuilder::new(self.map.hasher().clone());
-                b.add(next);
-                let tp = TokenPair::from(&prev);
-                self.map.insert(tp, b);
+                let mut builder = TokenWeightsBuilder::new(self.chain.hasher().clone());
+                builder.add(next);
+                self.chain.insert(TokenPair::from(&prev), builder);
             }
         }
     }
@@ -132,7 +131,7 @@ impl<S: BuildHasher + Clone + Default> NailBuilder<S> {
         self.feed_tokens(content.split_word_bounds())
     }
 
-    fn feed_tokens<'a, T: Iterator<Item = TokenRef<'a>>>(mut self, tokens: T) -> Option<Self> {
+    fn feed_tokens<'token, T: Iterator<Item = TokenRef<'token>>>(mut self, tokens: T) -> Option<Self> {
         let windows = tokens.tuple_windows();
 
         if windows.size_hint().1.is_none() {
