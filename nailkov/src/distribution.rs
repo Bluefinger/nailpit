@@ -7,7 +7,7 @@ use rand::Rng;
 use rand_distr::{Distribution, weighted::WeightedAliasIndex};
 use wyrand::RandomWyHashState;
 
-use crate::token::Token;
+use crate::{error::NailError, token::Token};
 
 /// A distribution of choices and their likelihood.
 #[derive(Clone, Debug)]
@@ -44,17 +44,15 @@ impl<S: BuildHasher> TokenWeightsBuilder<S> {
     }
 
     /// Creates a weighted distribution for the likelihood of tokens to appear.
-    pub fn build(self) -> Option<TokenWeights> {
+    pub fn build(self) -> Result<TokenWeights, NailError> {
         let (choices, counts): (Vec<_>, Vec<_>) = self.occurrences.into_iter().unzip();
 
         if choices.is_empty() {
-            return None;
+            return Err(NailError::EmptyInput);
         }
 
-        Some(TokenWeights {
-            dist: WeightedAliasIndex::new(counts)
-                .inspect_err(|err| log::error!("Error calculating weights: {}", err))
-                .ok()?,
+        Ok(TokenWeights {
+            dist: WeightedAliasIndex::new(counts).map_err(|_| NailError::BuildError)?,
             choices: choices.into(),
         })
     }

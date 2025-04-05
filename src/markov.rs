@@ -1,7 +1,7 @@
 use std::{iter::once, path::Path, sync::Arc};
 
 use bytes::{Bytes, BytesMut};
-use color_eyre::{Result, eyre::OptionExt};
+use color_eyre::Result;
 use futures_lite::Stream;
 use nailkov::NailKov;
 use tokio::sync::mpsc;
@@ -18,8 +18,7 @@ impl MarkovGen {
     pub fn new(size: usize, input: impl AsRef<Path>) -> Result<Self> {
         let file = std::fs::read_to_string(input.as_ref())?;
 
-        let chain =
-            Arc::new(NailKov::from_str(&file).ok_or_eyre("Couldn't initialise markov chain")?);
+        let chain = Arc::new(file.parse()?);
 
         Ok(Self { chain, size })
     }

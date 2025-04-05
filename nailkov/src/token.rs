@@ -47,7 +47,7 @@ impl From<&TokenPairRef<'_>> for TokenPair {
     }
 }
 
-impl<'a> AsRef<TokenPair> for TokenPair {
+impl AsRef<TokenPair> for TokenPair {
     fn as_ref(&self) -> &TokenPair {
         self
     }
