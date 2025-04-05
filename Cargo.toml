@@ -3,12 +3,17 @@ resolver = "3"
 members = ["nailkov"]
 
 [workspace.dependencies]
+log = { version = "0.4.27", features = ["std"] }
 serde = { version = "1.0.219", features = ["derive"] }
 rand_core = "0.9.3"
 rand = { version = "0.9", default-features = false }
 rand_distr = { version = "0.5.1" }
 wyrand = { version = "0.3.2", features = ["wyhash", "fully_randomised_wyhash"] }
-hashbrown = { version = "0.15.2", default-features = false, features = ["equivalent"] }
+hashbrown = { version = "0.15.2", default-features = false, features = [
+    "equivalent",
+] }
+unicode-segmentation = "1.12.0"
+itertools = "0.14.0"
 
 [package]
 name = "nailpit"
@@ -16,10 +21,18 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-axum = { version = "0.8.1", default-features = false, features = ["tokio", "http1", "http2"] }
+nailkov = { path = "nailkov" }
+axum = { version = "0.8.1", default-features = false, features = [
+    "tokio",
+    "http1",
+    "http2",
+] }
 axum-core = { version = "0.5.0", default-features = false }
 hyper = { version = "1.6.0", default-features = false, features = ["server"] }
-hyper-util = { version = "0.1.10", default-features = false, features = ["server", "server-auto"] }
+hyper-util = { version = "0.1.10", default-features = false, features = [
+    "server",
+    "server-auto",
+] }
 tokio = { version = "1.43.0", features = [
     "rt",
     "rt-multi-thread",
@@ -35,7 +48,7 @@ color-eyre = { version = "0.6.3", default-features = false }
 wyrand = { workspace = true, features = ["threadrng_wyhash"] }
 getrandom = { version = "0.3.2", features = ["std"] }
 rand_core.workspace = true
-log = { version = "0.4.27", features = ["std"] }
+log.workspace = true
 fastrace = { version = "0.7.9", features = ["enable"] }
 fastrace-axum = "0.1.0"
 logforth = { version = "0.23.1", features = ["fastrace"] }
@@ -43,7 +56,6 @@ tower = { version = "0.5.2", features = ["buffer", "limit"] }
 futures-concurrency = "7.6.3"
 bytes = "1.10.1"
 futures-lite = "2.6.0"
-markovish = "0.2.2"
 scc = "2.3.3"
 
 [profile.release]

@@ -54,7 +54,7 @@ async fn handler(source: ConnectInfo<SocketAddr>) -> Html<&'static str> {
 #[fastrace::trace]
 async fn generated() -> impl IntoResponse {
     BodyStream::from_stream(
-        MarkovGen::new(256, "./input/first.txt")
+        MarkovGen::new(256, "./input/markov.txt")
             .unwrap()
             .into_stream(),
     )

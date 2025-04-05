@@ -1,16 +1,16 @@
 use std::{iter::once, path::Path, sync::Arc};
 
 use bytes::{Bytes, BytesMut};
-use color_eyre::eyre::Result;
+use color_eyre::{Result, eyre::OptionExt};
 use futures_lite::Stream;
-use markovish::Chain;
+use nailkov::NailKov;
 use tokio::sync::mpsc;
 
 use crate::rng::FastRng;
 
 #[derive(Debug, Clone)]
 pub struct MarkovGen {
-    chain: Arc<Chain>,
+    chain: Arc<NailKov>,
     size: usize,
 }
 
@@ -18,10 +18,8 @@ impl MarkovGen {
     pub fn new(size: usize, input: impl AsRef<Path>) -> Result<Self> {
         let file = std::fs::read_to_string(input.as_ref())?;
 
-        let chain = Arc::new(
-            Chain::from_text(&file)
-                .map_err(|_| color_eyre::eyre::eyre!("Couldn't create the markov chain"))?,
-        );
+        let chain =
+            Arc::new(NailKov::from_str(&file).ok_or_eyre("Couldn't initialise markov chain")?);
 
         Ok(Self { chain, size })
     }
@@ -34,30 +32,17 @@ impl MarkovGen {
             let mut rng_source = FastRng::default();
 
             loop {
-                let mut current_size = 0;
-
                 if tx.is_closed() {
                     break;
                 }
 
-                let final_str = loop {
-                    let Some(generated) = chain.generate_str(&mut rng_source, desired_size) else {
-                        log::error!("failed to generate string from chain");
-                        continue;
-                    };
+                let generated = chain.generate_tokens(&mut rng_source).take(desired_size);
 
-                    let generated = generated.into_iter().take_while(|&s| {
-                        current_size += s.len();
-
-                        current_size < desired_size
-                    });
-
-                    break once("<p>\n")
-                        .chain(generated)
-                        .chain(once("\n</p>\n"))
-                        .flat_map(|str| str.as_bytes())
-                        .copied();
-                };
+                let final_str = once("<p>\n")
+                    .chain(generated)
+                    .chain(once("\n</p>\n"))
+                    .flat_map(|str| str.as_bytes())
+                    .copied();
 
                 if tx.blocking_send(Bytes::from_iter(final_str)).is_err() {
                     break;
@@ -114,7 +99,9 @@ impl MarkovGen {
 
                 // If system time is messed up, assume no time has passed
                 if time_limit != 0
-                    && (start_time.elapsed().unwrap_or(std::time::Duration::from_secs(0))
+                    && (start_time
+                        .elapsed()
+                        .unwrap_or(std::time::Duration::from_secs(0))
                         > time_limit_duration)
                 {
                     log::info!("Time limit was reached ({} s), breaking stream", time_limit,);

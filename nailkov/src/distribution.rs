@@ -1,27 +1,29 @@
 //! [`TokenDistribution`] are representations of how common [`Token`]s are, and are paired up with
 //! a [`TokenPair`](crate::token::TokenPair) in a [`Chain`](crate::Chain).
 
-use rand::{Rng, seq::WeightError};
-use rand_distr::{Distribution, weighted::WeightedAliasIndex};
 use core::hash::BuildHasher;
 use hashbrown::HashMap;
+use rand::Rng;
+use rand_distr::{Distribution, weighted::WeightedAliasIndex};
 use wyrand::RandomWyHashState;
 
 use crate::token::Token;
 
-/// A distribution of choices and their likelyhood.
+/// A distribution of choices and their likelihood.
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct TokenDistribution {
-    /// Mappings of index in choices to their likelyhood.
+    /// Mappings of index in choices to their likelihood.
     dist: WeightedAliasIndex<u64>,
     /// The actual choices
     choices: Vec<Token>,
 }
 
 impl TokenDistribution {
-    pub fn sample_token(&self, rng: &mut impl Rng) -> Option<&Token> {
-        self.choices.get(self.dist.sample(rng))
+    pub fn sample_token(&self, rng: &mut impl Rng) -> &Token {
+        // SAFETY: The sampled indices will always be in sync with with the tokens
+        // vector, so it will never go out of bounds.
+        unsafe { self.choices.get_unchecked(self.dist.sample(rng)) }
     }
 }
 
@@ -41,12 +43,14 @@ impl<S: BuildHasher> TokenDistributionBuilder<S> {
         }
     }
 
-    /// Creates a weighted distribution for the likelyhood of tokens to appear.
-    pub fn build(self) -> Result<TokenDistribution, WeightError> {
+    /// Creates a weighted distribution for the likelihood of tokens to appear.
+    pub fn build(self) -> Option<TokenDistribution> {
         let (choices, counts): (Vec<_>, Vec<_>) = self.map.into_iter().unzip();
 
-        Ok(TokenDistribution {
-            dist: WeightedAliasIndex::new(counts)?,
+        Some(TokenDistribution {
+            dist: WeightedAliasIndex::new(counts)
+                .inspect_err(|err| log::error!("Error calculating weights: {}", err))
+                .ok()?,
             choices,
         })
     }
