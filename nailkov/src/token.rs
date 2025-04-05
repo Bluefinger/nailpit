@@ -85,7 +85,7 @@ impl Equivalent<TokenPair> for TokenPairRef<'_> {
 
 impl Equivalent<Token> for str {
     fn equivalent(&self, key: &Token) -> bool {
-        key.as_ref() == self
+        key.as_ref().eq(self)
     }
 }
 
