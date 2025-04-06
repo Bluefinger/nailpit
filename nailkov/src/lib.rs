@@ -1,6 +1,6 @@
 mod distribution;
 mod error;
-mod interner;
+pub mod interner;
 mod token;
 
 use error::NailError;
@@ -20,7 +20,6 @@ use wyrand::RandomWyHashState;
 #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct NailKov<S = RandomWyHashState> {
     chain: HashMap<TokenPair, TokenWeights, S>,
-    interned: Interner,
 }
 
 pub struct NailKovIter<'a, R: RngCore, S = RandomWyHashState> {
@@ -49,7 +48,7 @@ impl<S: BuildHasher> NailKov<S> {
     pub fn generate_tokens<'a, R: RngCore>(
         &'a self,
         rng: &'a mut R,
-    ) -> impl Iterator<Item = &'a str> {
+    ) -> impl Iterator<Item = Token> {
         self.starting_token_pair(rng)
             .map(|&prev| NailKovIter {
                 prev,
@@ -58,7 +57,6 @@ impl<S: BuildHasher> NailKov<S> {
             })
             .into_iter()
             .flatten()
-            .flat_map(|token| self.interned.lookup(token))
     }
 
     fn pairs(&self) -> impl Iterator<Item = &TokenPair> {
@@ -70,40 +68,40 @@ impl<S: BuildHasher> NailKov<S> {
     }
 }
 
-impl core::str::FromStr for NailKov<RandomWyHashState> {
-    type Err = NailError;
-
-    fn from_str(input: &str) -> Result<Self, Self::Err> {
-        NailBuilder::default().with_input(input)
+impl NailKov<RandomWyHashState> {
+    pub fn from_input<'a>(interner: &'a mut Interner, input: &str) -> Result<NailKov, NailError> {
+        NailBuilder::new(RandomWyHashState::new()).with_input(interner, input)
     }
 }
 
 impl<S: BuildHasher + Clone + Default> NailKov<S> {
-    pub fn from_str_with_hasher(input: &str, hasher: S) -> Result<NailKov<S>, NailError> {
-        NailBuilder::new(hasher).with_input(input)
+    pub fn from_input_with_hasher<'a>(
+        interner: &'a mut Interner,
+        input: &str,
+        hasher: S,
+    ) -> Result<NailKov<S>, NailError> {
+        NailBuilder::new(hasher).with_input(interner, input)
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct NailBuilder<S = RandomWyHashState> {
+struct NailBuilder<S = RandomWyHashState> {
     chain: HashMap<TokenPair, TokenWeightsBuilder<S>, S>,
-    interned: Interner,
 }
 
 impl<S: BuildHasher + Clone + Default> NailBuilder<S> {
-    pub fn new(hasher: S) -> Self {
+    fn new(hasher: S) -> Self {
         Self {
             chain: HashMap::with_hasher(hasher),
-            interned: Interner::default(),
         }
     }
 
-    pub fn with_input(self, input: &str) -> Result<NailKov<S>, NailError> {
-        self.feed_str(input)?.build()
+    fn with_input(self, interned: &mut Interner, input: &str) -> Result<NailKov<S>, NailError> {
+        self.feed_str(interned, input)?.build()
     }
 
-    pub fn build(self) -> Result<NailKov<S>, NailError> {
+    fn build(self) -> Result<NailKov<S>, NailError> {
         if self.chain.is_empty() {
             return Err(NailError::EmptyInput);
         }
@@ -122,10 +120,7 @@ impl<S: BuildHasher + Clone + Default> NailBuilder<S> {
             return Err(NailError::BuildError);
         }
 
-        Ok(NailKov {
-            chain,
-            interned: self.interned,
-        })
+        Ok(NailKov { chain })
     }
 
     /// Add the occurrence of `next` following `prev`.
@@ -142,14 +137,15 @@ impl<S: BuildHasher + Clone + Default> NailBuilder<S> {
         }
     }
 
-    pub fn feed_str(self, content: &str) -> Result<Self, NailError> {
-        self.feed_tokens(content.split_word_bounds())
+    fn feed_str(self, interner: &mut Interner, content: &str) -> Result<Self, NailError> {
+        self.feed_tokens(
+            content
+                .split_word_bounds()
+                .map(|text| interner.intern(text).into()),
+        )
     }
 
-    fn feed_tokens<'token, T: Iterator<Item = &'token str>>(
-        mut self,
-        tokens: T,
-    ) -> Result<Self, NailError> {
+    fn feed_tokens<T: Iterator<Item = Token>>(mut self, tokens: T) -> Result<Self, NailError> {
         let windows = tokens.tuple_windows();
 
         if windows.size_hint().1.is_none() {
@@ -157,20 +153,9 @@ impl<S: BuildHasher + Clone + Default> NailBuilder<S> {
         }
 
         for (left, right, next) in windows {
-            let (left, right, next) = (
-                self.interned.intern(left),
-                self.interned.intern(right),
-                self.interned.intern(next),
-            );
             self.add_token_pair(TokenPair::new(left, right), next);
         }
 
         Ok(self)
-    }
-}
-
-impl Default for NailBuilder<RandomWyHashState> {
-    fn default() -> Self {
-        Self::new(RandomWyHashState::new())
     }
 }

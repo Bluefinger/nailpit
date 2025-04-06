@@ -42,7 +42,7 @@ impl AsRef<str> for StringPtr {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct Interner {
+pub struct Interner {
     collected: HashMap<StringPtr, InternedString, RandomWyHashState>,
     vec: Vec<StringPtr>,
     active: usize,
@@ -88,16 +88,14 @@ impl Interner {
     }
 
     unsafe fn alloc(&mut self, name: &str) -> StringPtr {
-        assert!(name.len() < u32::MAX as usize);
+        let (cur_len, cur_cap) = {
+            let cur_buf = &self.buffers[self.active];
 
-        let cur_buf = &self.buffers[self.active];
+            (cur_buf.len(), cur_buf.capacity())
+        };
 
-        let cap = cur_buf.capacity();
-
-        if cap < cur_buf.len() + name.len() {
-            let new_cap = (cap.max(name.len()) + 1)
-                .next_power_of_two()
-                .min(u32::MAX as usize);
+        if cur_cap < cur_len + name.len() {
+            let new_cap = (cur_cap.max(name.len()) + 1).next_power_of_two();
             let new_buf = String::with_capacity(new_cap);
             self.active = self.buffers.len();
             self.buffers.push(new_buf);

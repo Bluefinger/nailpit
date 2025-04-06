@@ -1,12 +1,19 @@
-use std::{iter::once, path::Path, sync::Arc};
+use std::{
+    iter::once,
+    path::Path,
+    sync::{Arc, LazyLock},
+};
 
 use bytes::{Bytes, BytesMut};
 use color_eyre::Result;
 use futures_lite::Stream;
-use nailkov::NailKov;
+use nailkov::{NailKov, interner::Interner};
+use parking_lot::RwLock;
 use tokio::sync::mpsc;
 
 use crate::rng::FastRng;
+
+static INTERNER: LazyLock<Arc<RwLock<Interner>>> = LazyLock::new(Default::default);
 
 #[derive(Debug, Clone)]
 pub struct MarkovGen {
@@ -18,7 +25,11 @@ impl MarkovGen {
     pub fn new(size: usize, input: impl AsRef<Path>) -> Result<Self> {
         let file = std::fs::read_to_string(input.as_ref())?;
 
-        let chain = Arc::new(file.parse()?);
+        let mut interner = INTERNER.write();
+
+        let chain = Arc::new(NailKov::from_input(&mut interner, &file)?);
+
+        drop(interner);
 
         Ok(Self { chain, size })
     }
@@ -35,7 +46,12 @@ impl MarkovGen {
                     break;
                 }
 
-                let generated = chain.generate_tokens(&mut rng_source).take(desired_size);
+                let interner = INTERNER.read();
+
+                let generated = chain
+                    .generate_tokens(&mut rng_source)
+                    .flat_map(|token| interner.lookup(token))
+                    .take(desired_size);
 
                 let final_str = once("<p>\n")
                     .chain(generated)
@@ -92,7 +108,7 @@ impl MarkovGen {
             // Don't want to call `self.config()` over and over
             let time_limit = 60;
             let time_limit_duration = std::time::Duration::from_secs(60);
-            let size_limit = 1024 * 10;
+            let size_limit = 1024 * 100;
             loop {
                 // `0` means no limit
 
