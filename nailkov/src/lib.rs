@@ -58,7 +58,7 @@ impl<S: BuildHasher> NailKov<S> {
             })
             .into_iter()
             .flatten()
-            .map(|token| self.interned.lookup(token.id()))
+            .flat_map(|token| self.interned.lookup(token))
     }
 
     fn pairs(&self) -> impl Iterator<Item = &TokenPair> {

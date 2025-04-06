@@ -19,15 +19,6 @@ pub struct TokenWeights {
     choices: Box<[Token]>,
 }
 
-// impl TokenWeights {
-//     pub fn sample_token(&self, rng: &mut impl Rng) -> Token {
-//         // SAFETY: The sampled indices will always be in sync with with the tokens
-//         // vector, so it will never go out of bounds. We will also never have an empty
-//         // TokenWeights instance.
-//         unsafe { self.choices.get_unchecked(self.dist.sample(rng)) }
-//     }
-// }
-
 impl Distribution<Token> for TokenWeights {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Token {
         unsafe { *self.choices.get_unchecked(self.dist.sample(rng)) }
