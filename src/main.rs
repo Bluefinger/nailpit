@@ -44,6 +44,9 @@ static GEN_HEADER: LazyLock<HeaderMap> = LazyLock::new(|| {
     headers
 });
 
+static MARKOV: LazyLock<MarkovGen> =
+    LazyLock::new(|| MarkovGen::new(256, "./input/markov.txt").unwrap());
+
 #[fastrace::trace]
 async fn handler(source: ConnectInfo<SocketAddr>) -> Html<&'static str> {
     log::info!("Into the tarpit, {}", source.ip());
@@ -53,12 +56,7 @@ async fn handler(source: ConnectInfo<SocketAddr>) -> Html<&'static str> {
 
 #[fastrace::trace]
 async fn generated() -> impl IntoResponse {
-    BodyStream::from_stream(
-        MarkovGen::new(256, "./input/markov.txt")
-            .unwrap()
-            .into_stream(),
-    )
-    .headers(GEN_HEADER.clone())
+    BodyStream::from_stream(MARKOV.clone().into_stream()).headers(GEN_HEADER.clone())
 }
 
 #[fastrace::trace]
@@ -86,6 +84,8 @@ async fn nailpit_axum(
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
 
     log::info!("listening on http://{}", listener.local_addr()?);
+
+    LazyLock::<MarkovGen>::force(&MARKOV);
 
     let app = Router::new()
         .route("/", get(handler))

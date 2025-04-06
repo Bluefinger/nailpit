@@ -108,7 +108,7 @@ impl MarkovGen {
             // Don't want to call `self.config()` over and over
             let time_limit = 60;
             let time_limit_duration = std::time::Duration::from_secs(60);
-            let size_limit = 1024 * 100;
+            let size_limit = 1024 * 1000;
             loop {
                 // `0` means no limit
 
@@ -125,9 +125,10 @@ impl MarkovGen {
 
                 if size_limit != 0 && bytes_written >= size_limit {
                     log::info!(
-                        "Size limit was reached ({:.2} MB, {:.2} GB)",
+                        "Size limit was reached ({:.2} MB, {:.2} GB) in {}us",
                         (bytes_written as f64) * 1e-6,
-                        (bytes_written as f64) * 1e-9
+                        (bytes_written as f64) * 1e-9,
+                        start_time.elapsed().unwrap_or(std::time::Duration::from_secs(0)).as_micros()
                     );
                     return;
                 }
