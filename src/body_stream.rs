@@ -8,8 +8,8 @@ use axum::{
     http::{HeaderMap, Response},
     response::IntoResponse,
 };
+use futures_lite::{Stream, StreamExt, stream::Boxed};
 use hyper::body::{Bytes, Frame};
-use futures_lite::{stream::Boxed, Stream, StreamExt};
 
 pub struct BodyStream {
     stream: Boxed<Result<Frame<Bytes>, axum::Error>>,

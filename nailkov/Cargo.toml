@@ -12,6 +12,7 @@ hashbrown.workspace = true
 itertools.workspace = true
 unicode-segmentation.workspace = true
 log.workspace = true
+indexmap.workspace = true
 
 [features]
 serde = ["dep:serde", "rand/serde"]

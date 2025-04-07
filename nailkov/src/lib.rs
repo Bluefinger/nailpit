@@ -28,7 +28,7 @@ pub struct NailKovIter<'a, R: RngCore, S = RandomWyHashState> {
     prev: TokenPair,
 }
 
-impl<'a, R: RngCore, S: BuildHasher> Iterator for NailKovIter<'a, R, S> {
+impl<R: RngCore, S: BuildHasher> Iterator for NailKovIter<'_, R, S> {
     type Item = Token;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -69,14 +69,14 @@ impl<S: BuildHasher> NailKov<S> {
 }
 
 impl NailKov<RandomWyHashState> {
-    pub fn from_input<'a>(interner: &'a mut Interner, input: &str) -> Result<NailKov, NailError> {
+    pub fn from_input(interner: &mut Interner, input: &str) -> Result<NailKov, NailError> {
         NailBuilder::new(RandomWyHashState::new()).with_input(interner, input)
     }
 }
 
 impl<S: BuildHasher + Clone + Default> NailKov<S> {
-    pub fn from_input_with_hasher<'a>(
-        interner: &'a mut Interner,
+    pub fn from_input_with_hasher(
+        interner: &mut Interner,
         input: &str,
         hasher: S,
     ) -> Result<NailKov<S>, NailError> {

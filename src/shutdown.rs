@@ -2,7 +2,10 @@ use std::sync::Arc;
 
 use color_eyre::Result;
 use futures_concurrency::future::Race;
-use tokio::{signal, sync::watch::{Sender, Receiver}};
+use tokio::{
+    signal,
+    sync::watch::{Receiver, Sender},
+};
 
 #[fastrace::trace]
 pub async fn shutdown_task(notifier: Receiver<()>) -> Result<()> {

@@ -21,6 +21,8 @@ pub struct TokenWeights {
 
 impl Distribution<Token> for TokenWeights {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Token {
+        // SAFETY: The sampled index from `dist` will always correspond to a valid
+        // token in the `choices` slice.
         unsafe { *self.choices.get_unchecked(self.dist.sample(rng)) }
     }
 }
@@ -56,14 +58,10 @@ impl<S: BuildHasher> TokenWeightsBuilder<S> {
 
     /// Count an occurrence of this token, or add it if it hasn't been seen before.
     pub fn add(&mut self, token: Token) {
-        match self.occurrences.get_mut(&token) {
-            Some(n) => {
-                *n += 1;
-            }
-            None => {
-                self.occurrences.insert(token, 1);
-            }
-        }
+        self.occurrences
+            .entry(token)
+            .and_modify(|count| *count += 1)
+            .or_insert(1);
     }
 }
 

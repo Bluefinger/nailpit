@@ -1,6 +1,5 @@
 mod body_stream;
 mod markov;
-mod pit;
 mod rng;
 mod shutdown;
 mod state;
