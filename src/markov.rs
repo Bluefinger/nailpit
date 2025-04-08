@@ -22,26 +22,36 @@ pub struct MarkovGen {
     size: usize,
 }
 
-fn paragraph<'a>(chain: &NailKov, size: usize, rng: &mut impl RngCore) -> Bytes {
-    let interner = INTERNER.read();
-
-    let generated = chain
+fn generator<'a>(
+    interner: &'a Interner,
+    chain: &'a NailKov,
+    size: usize,
+    rng: &'a mut impl RngCore,
+) -> impl Iterator<Item = &'a str> + 'a {
+    chain
         .generate_tokens(rng)
         .flat_map(|token| interner.lookup(token))
-        .take(size);
-
-    iter_to_bytes(once("<p>\n").chain(generated).chain(once("\n</p>\n")))
+        .take(size)
 }
 
-fn h1<'a>(chain: &NailKov, size: usize, rng: &mut impl RngCore) -> Bytes {
+fn paragraph(chain: &NailKov, size: usize, rng: &mut impl RngCore) -> Bytes {
     let interner = INTERNER.read();
 
-    let generated = chain
-        .generate_tokens(rng)
-        .flat_map(|token| interner.lookup(token))
-        .take(size);
+    iter_to_bytes(
+        once("<p>\n")
+            .chain(generator(&interner, chain, size, rng))
+            .chain(once("\n</p>\n")),
+    )
+}
 
-    iter_to_bytes(once("\n<h1>").chain(generated).chain(once("</h1>\n")))
+fn h1(chain: &NailKov, size: usize, rng: &mut impl RngCore) -> Bytes {
+    let interner = INTERNER.read();
+
+    iter_to_bytes(
+        once("\n<h1>")
+            .chain(generator(&interner, chain, size, rng))
+            .chain(once("</h1>\n")),
+    )
 }
 
 #[inline]
