@@ -2,6 +2,13 @@
 resolver = "3"
 members = ["nailkov"]
 
+[workspace.package]
+authors = ["Gonçalo Rica Pais da Silva <bluefinger@gmail.com>"]
+edition = "2024"
+repository = "https://github.com/Bluefinger/nailpit"
+version = "0.1.0"
+rust-version = "1.86.0"
+
 [workspace.dependencies]
 log = { version = "0.4.27", features = ["std"] }
 serde = { version = "1.0.219", features = ["derive"] }
@@ -20,8 +27,11 @@ indexmap = "2.9.0"
 
 [package]
 name = "nailpit"
-version = "0.1.0"
-edition = "2024"
+edition.workspace = true
+repository.workspace = true
+version.workspace = true
+authors.workspace = true
+rust-version.workspace = true
 
 [features]
 tracing = ["fastrace/enable"]
