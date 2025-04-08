@@ -19,12 +19,11 @@ pub struct TokenWeights {
     choices: Box<[Token]>,
 }
 
-impl TokenWeights {
-    pub fn sample_token(&self, rng: &mut impl Rng) -> &str {
-        // SAFETY: The sampled indices will always be in sync with with the tokens
-        // vector, so it will never go out of bounds. We will also never have an empty
-        // TokenWeights instance.
-        unsafe { self.choices.get_unchecked(self.dist.sample(rng)) }
+impl Distribution<Token> for TokenWeights {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Token {
+        // SAFETY: The sampled index from `dist` will always correspond to a valid
+        // token in the `choices` slice.
+        unsafe { *self.choices.get_unchecked(self.dist.sample(rng)) }
     }
 }
 
@@ -58,15 +57,11 @@ impl<S: BuildHasher> TokenWeightsBuilder<S> {
     }
 
     /// Count an occurrence of this token, or add it if it hasn't been seen before.
-    pub fn add(&mut self, token: &str) {
-        match self.occurrences.get_mut(token) {
-            Some(n) => {
-                *n += 1;
-            }
-            None => {
-                self.occurrences.insert(token.into(), 1);
-            }
-        }
+    pub fn add(&mut self, token: Token) {
+        self.occurrences
+            .entry(token)
+            .and_modify(|count| *count += 1)
+            .or_insert(1);
     }
 }
 

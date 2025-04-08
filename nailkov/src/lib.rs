@@ -1,15 +1,18 @@
 mod distribution;
 mod error;
+pub mod interner;
 mod token;
 
 use error::NailError;
 use hashbrown::HashMap;
+use interner::Interner;
 use itertools::Itertools;
 use rand::{RngCore, seq::IteratorRandom};
+use rand_distr::Distribution;
 use std::hash::BuildHasher;
 
 use distribution::{TokenWeights, TokenWeightsBuilder};
-use token::{TokenPair, TokenPairRef, TokenRef};
+use token::{Token, TokenPair};
 use unicode_segmentation::UnicodeSegmentation;
 use wyrand::RandomWyHashState;
 
@@ -22,37 +25,32 @@ pub struct NailKov<S = RandomWyHashState> {
 pub struct NailKovIter<'a, R: RngCore, S = RandomWyHashState> {
     rng: &'a mut R,
     chain: &'a NailKov<S>,
-    prev: TokenPairRef<'a>,
+    prev: TokenPair,
 }
 
-impl<'a, R: RngCore, S: BuildHasher> Iterator for NailKovIter<'a, R, S> {
-    type Item = &'a str;
+impl<R: RngCore, S: BuildHasher> Iterator for NailKovIter<'_, R, S> {
+    type Item = Token;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let next_token = self.chain.generate_next_token(&mut self.rng, &self.prev)?;
+        let next_token = self.chain.generate_next_token(&mut self.rng, self.prev)?;
 
-        self.prev = (self.prev.1, next_token);
+        self.prev = TokenPair::new(self.prev.1, next_token);
 
         Some(next_token)
     }
 }
 
 impl<S: BuildHasher> NailKov<S> {
-    fn generate_next_token(
-        &self,
-        rng: &mut impl RngCore,
-        prev: &TokenPairRef<'_>,
-    ) -> Option<TokenRef<'_>> {
-        self.chain.get(prev).map(|dist| dist.sample_token(rng))
+    fn generate_next_token(&self, rng: &mut impl RngCore, prev: TokenPair) -> Option<Token> {
+        self.chain.get(&prev).map(|dist| dist.sample(rng))
     }
 
     pub fn generate_tokens<'a, R: RngCore>(
         &'a self,
         rng: &'a mut R,
-    ) -> impl Iterator<Item = &'a str> {
+    ) -> impl Iterator<Item = Token> {
         self.starting_token_pair(rng)
-            .map(TokenPair::as_token_pair_ref)
-            .map(|prev| NailKovIter {
+            .map(|&prev| NailKovIter {
                 prev,
                 rng,
                 chain: self,
@@ -70,38 +68,40 @@ impl<S: BuildHasher> NailKov<S> {
     }
 }
 
-impl core::str::FromStr for NailKov<RandomWyHashState> {
-    type Err = NailError;
-
-    fn from_str(input: &str) -> Result<Self, Self::Err> {
-        NailBuilder::default().with_input(input)
+impl NailKov<RandomWyHashState> {
+    pub fn from_input(interner: &mut Interner, input: &str) -> Result<NailKov, NailError> {
+        NailBuilder::new(RandomWyHashState::new()).with_input(interner, input)
     }
 }
 
 impl<S: BuildHasher + Clone + Default> NailKov<S> {
-    pub fn from_str_with_hasher(input: &str, hasher: S) -> Result<NailKov<S>, NailError> {
-        NailBuilder::new(hasher).with_input(input)
+    pub fn from_input_with_hasher(
+        interner: &mut Interner,
+        input: &str,
+        hasher: S,
+    ) -> Result<NailKov<S>, NailError> {
+        NailBuilder::new(hasher).with_input(interner, input)
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct NailBuilder<S = RandomWyHashState> {
+struct NailBuilder<S = RandomWyHashState> {
     chain: HashMap<TokenPair, TokenWeightsBuilder<S>, S>,
 }
 
 impl<S: BuildHasher + Clone + Default> NailBuilder<S> {
-    pub fn new(hasher: S) -> Self {
+    fn new(hasher: S) -> Self {
         Self {
             chain: HashMap::with_hasher(hasher),
         }
     }
 
-    pub fn with_input(self, input: &str) -> Result<NailKov<S>, NailError> {
-        self.feed_str(input)?.build()
+    fn with_input(self, interned: &mut Interner, input: &str) -> Result<NailKov<S>, NailError> {
+        self.feed_str(interned, input)?.build()
     }
 
-    pub fn build(self) -> Result<NailKov<S>, NailError> {
+    fn build(self) -> Result<NailKov<S>, NailError> {
         if self.chain.is_empty() {
             return Err(NailError::EmptyInput);
         }
@@ -124,27 +124,28 @@ impl<S: BuildHasher + Clone + Default> NailBuilder<S> {
     }
 
     /// Add the occurrence of `next` following `prev`.
-    fn add_token_pair(&mut self, prev: TokenPairRef<'_>, next: &str) {
+    fn add_token_pair(&mut self, prev: TokenPair, next: impl Into<Token>) {
         match self.chain.get_mut(&prev) {
             Some(builder) => {
-                builder.add(next);
+                builder.add(next.into());
             }
             None => {
                 let mut builder = TokenWeightsBuilder::new(self.chain.hasher().clone());
-                builder.add(next);
-                self.chain.insert(TokenPair::from(&prev), builder);
+                builder.add(next.into());
+                self.chain.insert(prev, builder);
             }
         }
     }
 
-    pub fn feed_str(self, content: &str) -> Result<Self, NailError> {
-        self.feed_tokens(content.split_word_bounds())
+    fn feed_str(self, interner: &mut Interner, content: &str) -> Result<Self, NailError> {
+        self.feed_tokens(
+            content
+                .split_word_bounds()
+                .map(|text| interner.intern(text).into()),
+        )
     }
 
-    fn feed_tokens<'token, T: Iterator<Item = TokenRef<'token>>>(
-        mut self,
-        tokens: T,
-    ) -> Result<Self, NailError> {
+    fn feed_tokens<T: Iterator<Item = Token>>(mut self, tokens: T) -> Result<Self, NailError> {
         let windows = tokens.tuple_windows();
 
         if windows.size_hint().1.is_none() {
@@ -152,15 +153,9 @@ impl<S: BuildHasher + Clone + Default> NailBuilder<S> {
         }
 
         for (left, right, next) in windows {
-            self.add_token_pair((left, right), next);
+            self.add_token_pair(TokenPair::new(left, right), next);
         }
 
         Ok(self)
-    }
-}
-
-impl Default for NailBuilder<RandomWyHashState> {
-    fn default() -> Self {
-        Self::new(RandomWyHashState::new())
     }
 }

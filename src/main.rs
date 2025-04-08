@@ -1,6 +1,6 @@
 mod body_stream;
+mod html_gen;
 mod markov;
-mod pit;
 mod rng;
 mod shutdown;
 mod state;
@@ -26,6 +26,8 @@ use hyper::{HeaderMap, StatusCode, header::CONTENT_TYPE};
 use logforth::append;
 use logforth::filter::EnvFilter;
 use markov::MarkovGen;
+use nailkov::interner::Interner;
+use parking_lot::RwLock;
 use shutdown::{shutdown_task, wait_for_shutdown};
 use state::{ServerState, track_incoming_sources};
 use tokio::time::interval_at;
@@ -44,6 +46,11 @@ static GEN_HEADER: LazyLock<HeaderMap> = LazyLock::new(|| {
     headers
 });
 
+static INTERNER: LazyLock<Arc<RwLock<Interner>>> = LazyLock::new(Default::default);
+
+static MARKOV: LazyLock<MarkovGen> =
+    LazyLock::new(|| MarkovGen::new(256, "./input/markov.txt").unwrap());
+
 #[fastrace::trace]
 async fn handler(source: ConnectInfo<SocketAddr>) -> Html<&'static str> {
     log::info!("Into the tarpit, {}", source.ip());
@@ -53,12 +60,7 @@ async fn handler(source: ConnectInfo<SocketAddr>) -> Html<&'static str> {
 
 #[fastrace::trace]
 async fn generated() -> impl IntoResponse {
-    BodyStream::from_stream(
-        MarkovGen::new(256, "./input/markov.txt")
-            .unwrap()
-            .into_stream(),
-    )
-    .headers(GEN_HEADER.clone())
+    BodyStream::from_stream(MARKOV.clone().into_stream()).headers(GEN_HEADER.clone())
 }
 
 #[fastrace::trace]
@@ -89,7 +91,12 @@ async fn nailpit_axum(
 
     let app = Router::new()
         .route("/", get(handler))
-        .fallback(get(generated))
+        .nest(
+            "/private",
+            Router::new()
+                .route("/", get(generated))
+                .fallback(get(generated)),
+        )
         .layer(
             ServiceBuilder::new()
                 .layer(fastrace_axum::FastraceLayer)
@@ -163,6 +170,8 @@ fn main() -> Result<()> {
 
     log::info!("Welcome to Nailpit!");
 
+    LazyLock::force(&MARKOV);
+
     let rt = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(std::thread::available_parallelism()?.get().min(4))
         .enable_all()
@@ -170,8 +179,12 @@ fn main() -> Result<()> {
 
     rt.block_on(nailpit_main())?;
 
+    log::info!("Waiting for background tasks to complete...");
+
     // Wait at most 30 seconds for remaining background tasks to complete
-    rt.shutdown_timeout(Duration::from_secs(30));
+    rt.shutdown_timeout(Duration::from_secs(60));
+
+    log::info!("Everything shutdown gracefully. Good night :)");
 
     fastrace::flush();
 
