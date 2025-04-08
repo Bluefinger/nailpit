@@ -9,6 +9,7 @@ use color_eyre::Result;
 use futures_lite::Stream;
 use nailkov::{NailKov, interner::Interner};
 use parking_lot::RwLock;
+use rand::{Rng, RngCore};
 use tokio::sync::mpsc;
 
 use crate::rng::FastRng;
@@ -19,6 +20,33 @@ static INTERNER: LazyLock<Arc<RwLock<Interner>>> = LazyLock::new(Default::defaul
 pub struct MarkovGen {
     chain: Arc<NailKov>,
     size: usize,
+}
+
+fn paragraph<'a>(chain: &NailKov, size: usize, rng: &mut impl RngCore) -> Bytes {
+    let interner = INTERNER.read();
+
+    let generated = chain
+        .generate_tokens(rng)
+        .flat_map(|token| interner.lookup(token))
+        .take(size);
+
+    iter_to_bytes(once("<p>\n").chain(generated).chain(once("\n</p>\n")))
+}
+
+fn h1<'a>(chain: &NailKov, size: usize, rng: &mut impl RngCore) -> Bytes {
+    let interner = INTERNER.read();
+
+    let generated = chain
+        .generate_tokens(rng)
+        .flat_map(|token| interner.lookup(token))
+        .take(size);
+
+    iter_to_bytes(once("\n<h1>").chain(generated).chain(once("</h1>\n")))
+}
+
+#[inline]
+fn iter_to_bytes<'a>(generator: impl Iterator<Item = &'a str>) -> Bytes {
+    Bytes::from_iter(generator.flat_map(|text| text.as_bytes()).copied())
 }
 
 impl MarkovGen {
@@ -34,32 +62,29 @@ impl MarkovGen {
         Ok(Self { chain, size })
     }
 
-    pub fn generate(&self, tx: tokio::sync::mpsc::Sender<Bytes>) {
+    pub fn start(&self, tx: tokio::sync::mpsc::Sender<Bytes>) {
         let desired_size = self.size.max(128);
         let chain = self.chain.clone();
 
         tokio::task::spawn_blocking(move || {
-            let mut rng_source = FastRng::default();
+            let mut rng = FastRng::default();
 
             loop {
                 if tx.is_closed() {
                     break;
                 }
 
-                let interner = INTERNER.read();
+                let max_paras: u32 = rng.random_range(1..3);
 
-                let generated = chain
-                    .generate_tokens(&mut rng_source)
-                    .flat_map(|token| interner.lookup(token))
-                    .take(desired_size);
+                let mut buffer = BytesMut::new();
 
-                let final_str = once("<p>\n")
-                    .chain(generated)
-                    .chain(once("\n</p>\n"))
-                    .flat_map(|str| str.as_bytes())
-                    .copied();
+                buffer.extend(h1(chain.as_ref(), 24, &mut rng));
 
-                if tx.blocking_send(Bytes::from_iter(final_str)).is_err() {
+                for _ in 0..max_paras {
+                    buffer.extend(paragraph(chain.as_ref(), desired_size, &mut rng));
+                }
+
+                if tx.blocking_send(buffer.freeze()).is_err() {
                     break;
                 }
             }
@@ -70,7 +95,7 @@ impl MarkovGen {
         let (tx, rx) = tokio::sync::mpsc::channel::<Bytes>(1);
         tokio::spawn(async move {
             let (gen_tx, mut generator) = mpsc::channel(32);
-            self.generate(gen_tx);
+            self.start(gen_tx);
             let mut bytes_written = 0_usize;
 
             // For the first value we want to prepend something to make it look like HTML.

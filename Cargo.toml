@@ -51,6 +51,7 @@ color-eyre = { version = "0.6.3", default-features = false }
 wyrand = { workspace = true, features = ["threadrng_wyhash"] }
 getrandom = { version = "0.3.2", features = ["std"] }
 rand_core.workspace = true
+rand.workspace = true
 log.workspace = true
 fastrace = { version = "0.7.9", features = ["enable"] }
 fastrace-axum = "0.1.0"
