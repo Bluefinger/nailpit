@@ -64,7 +64,7 @@ futures-concurrency = "7.6.3"
 bytes = "1.10.1"
 futures-lite = "2.6.0"
 scc = "2.3.3"
-parking_lot = { workspace = true, features = ["arc_lock"] }
+parking_lot.workspace = true
 
 [profile.release]
 codegen-units = 1
