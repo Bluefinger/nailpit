@@ -23,6 +23,9 @@ name = "nailpit"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+tracing = ["fastrace/enable"]
+
 [dependencies]
 nailkov = { path = "nailkov" }
 axum = { version = "0.8.1", default-features = false, features = [
@@ -53,7 +56,7 @@ getrandom = { version = "0.3.2", features = ["std"] }
 rand_core.workspace = true
 rand.workspace = true
 log.workspace = true
-fastrace = { version = "0.7.9", features = ["enable"] }
+fastrace = { version = "0.7.9" }
 fastrace-axum = "0.1.0"
 logforth = { version = "0.23.1", features = ["fastrace"] }
 tower = { version = "0.5.2", features = ["buffer", "limit"] }

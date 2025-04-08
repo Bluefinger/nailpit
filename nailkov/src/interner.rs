@@ -48,6 +48,8 @@ impl Interner {
     }
 
     pub fn with_capacity(cap: usize) -> Interner {
+        // This will get us just under 64KiB of interned storage before we
+        // need to allocate more space for buffer storage.
         let mut buffers = Vec::with_capacity(8);
 
         buffers.push(String::with_capacity(cap.next_power_of_two()));
@@ -96,13 +98,16 @@ impl Interner {
         };
 
         if cur_cap < cur_len + text.len() {
+            // If we ran out of capacity in our storage, allocate a new buffer with
+            // larger capacity.
             let new_cap = (cur_cap.max(text.len()) + 1).next_power_of_two();
             let new_buf = String::with_capacity(new_cap);
             self.active = self.buffers.len();
             self.buffers.push(new_buf);
         }
 
-        // Construct raw pointer to eliminate lifetime tracking
+        // Construct raw str slice to eliminate lifetime tracking as we manage its
+        // lifetime within the Interner instance.
         // SAFETY: There is always one buffer in the vector, and the active index
         // is managed by the alloc method, ensuring it is always in sync with the
         // active buffer.
