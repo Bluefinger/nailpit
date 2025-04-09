@@ -5,6 +5,7 @@ repository.workspace = true
 version.workspace = true
 authors.workspace = true
 rust-version.workspace = true
+license.workspace = true
 
 [dependencies]
 serde = { workspace = true, optional = true }

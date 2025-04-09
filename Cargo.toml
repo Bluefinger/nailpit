@@ -7,6 +7,7 @@ authors = ["Gonçalo Rica Pais da Silva <bluefinger@gmail.com>"]
 edition = "2024"
 repository = "https://github.com/Bluefinger/nailpit"
 version = "0.1.0"
+license = "AGPL-3.0-only"
 rust-version = "1.86.0"
 
 [workspace.dependencies]
@@ -32,6 +33,7 @@ repository.workspace = true
 version.workspace = true
 authors.workspace = true
 rust-version.workspace = true
+license.workspace = true
 
 [features]
 tracing = ["fastrace/enable"]
