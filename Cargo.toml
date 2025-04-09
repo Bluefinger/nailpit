@@ -51,7 +51,7 @@ hyper-util = { version = "0.1.10", default-features = false, features = [
     "server",
     "server-auto",
 ] }
-tokio = { version = "1.43.0", features = [
+tokio = { version = "1.44.2", features = [
     "rt",
     "rt-multi-thread",
     "sync",

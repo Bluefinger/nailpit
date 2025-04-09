@@ -1,10 +1,10 @@
-use std::{cell::UnsafeCell, ptr::NonNull, rc::Rc};
+use std::{cell::UnsafeCell, ptr::NonNull};
 
 use rand_core::RngCore;
 use wyrand::WyRand;
 
 thread_local! {
-    static SOURCE: Rc<UnsafeCell<WyRand>> = Rc::new(UnsafeCell::new(WyRand::new(getrandom::u64().expect("Failed to source entropy"))))
+    static SOURCE: UnsafeCell<WyRand> = UnsafeCell::new(WyRand::new(getrandom::u64().expect("Failed to source entropy")))
 }
 
 pub struct FastRng(WyRand);
