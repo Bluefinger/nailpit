@@ -23,15 +23,20 @@ impl core::hash::Hash for StringPtr {
         self.cast().hash(state);
     }
 }
-
+// SAFETY: StringPtr contains a ptr to the heap, that is never moved or invalidated
+// while Interner lives, and all instances of StringPtr live as long as Interner.
+// Since the String type is `Send`, so is StringPtr
 unsafe impl Send for StringPtr {}
+// SAFETY: StringPtr contains a ptr to the heap, that is never moved or invalidated
+// while Interner lives, and all instances of StringPtr live as long as Interner.
+// Since the String type is `Sync`, so is StringPtr
 unsafe impl Sync for StringPtr {}
 
 #[derive(Debug, Clone)]
 pub struct Interner {
     collected: IndexMap<StringPtr, InternedString, RandomWyHashState>,
-    active: usize,
-    buffers: Vec<String>,
+    buffer: String,
+    stored: Vec<String>,
 }
 
 impl Default for Interner {
@@ -50,14 +55,12 @@ impl Interner {
     pub fn with_capacity(cap: usize) -> Interner {
         // This will get us just under 64KiB of interned storage before we
         // need to allocate more space for buffer storage.
-        let mut buffers = Vec::with_capacity(8);
-
-        buffers.push(String::with_capacity(cap.next_power_of_two()));
+        let stored = Vec::with_capacity(8);
 
         Interner {
             collected: IndexMap::with_hasher(RandomWyHashState::new()),
-            buffers,
-            active: 0,
+            stored,
+            buffer: String::with_capacity(cap.next_power_of_two()),
         }
     }
 
@@ -88,35 +91,24 @@ impl Interner {
     /// The caller must ensure that `self.buffers` and `self.active` are never modified elsewhere,
     /// and that this is only called for new instances of `text`.
     unsafe fn alloc(&mut self, text: &str) -> StringPtr {
-        // SAFETY: There is always one buffer in the vector, and the active index
-        // is managed by the alloc method, ensuring it is always in sync with the
-        // active buffer.
-        let (cur_len, cur_cap) = unsafe {
-            let cur_buf = self.buffers.get_unchecked(self.active);
+        let capacity = self.buffer.capacity();
 
-            (cur_buf.len(), cur_buf.capacity())
-        };
-
-        if cur_cap < cur_len + text.len() {
+        if capacity < self.buffer.len() + text.len() {
             // If we ran out of capacity in our storage, allocate a new buffer with
             // larger capacity.
-            let new_cap = (cur_cap.max(text.len()) + 1).next_power_of_two();
-            let new_buf = String::with_capacity(new_cap);
-            self.active = self.buffers.len();
-            self.buffers.push(new_buf);
+            let new_cap = (capacity.max(text.len()) + 1).next_power_of_two();
+            let old_buf = core::mem::replace(&mut self.buffer, String::with_capacity(new_cap));
+
+            self.stored.push(old_buf);
         }
 
         // Construct raw str slice to eliminate lifetime tracking as we manage its
         // lifetime within the Interner instance.
-        // SAFETY: There is always one buffer in the vector, and the active index
-        // is managed by the alloc method, ensuring it is always in sync with the
-        // active buffer.
-        let interned = unsafe {
-            let active_buf = self.buffers.get_unchecked_mut(self.active);
-            let start = active_buf.len();
-            active_buf.push_str(text);
+        let interned = {
+            let start = self.buffer.len();
+            self.buffer.push_str(text);
 
-            &raw const active_buf[start..]
+            &raw const self.buffer[start..]
         };
 
         StringPtr(interned)
@@ -151,19 +143,19 @@ mod tests {
     fn is_able_to_intern_one_string() {
         let mut interner = Interner::default();
 
-        assert!(interner.buffers[0].is_empty());
+        assert!(interner.buffer.is_empty());
 
         let text = "Lorem ipsum";
 
         let id = interner.intern(text);
 
         assert_eq!(Some(text), interner.lookup(id));
-        assert_eq!(interner.buffers[0].len(), 11);
+        assert_eq!(interner.buffer.len(), 11);
 
         let again = interner.intern(text);
 
         assert_eq!(id, again);
-        assert_eq!(interner.buffers[0].len(), 11);
+        assert_eq!(interner.buffer.len(), 11);
     }
 
     #[test]
@@ -195,8 +187,8 @@ mod tests {
                 InternedString(5)
             ]
         );
-        assert_eq!(interner.buffers.len(), 2);
-        assert_eq!(interner.buffers[1].capacity(), 64);
+        assert_eq!(interner.stored.len(), 2);
+        assert_eq!(interner.stored[1].capacity(), 64);
     }
 
     #[test]
