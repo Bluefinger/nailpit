@@ -1,4 +1,4 @@
-use std::{cell::UnsafeCell, ptr::NonNull};
+use std::cell::UnsafeCell;
 
 use rand_core::RngCore;
 use wyrand::WyRand;
@@ -12,9 +12,14 @@ pub struct FastRng(WyRand);
 impl Default for FastRng {
     fn default() -> Self {
         SOURCE.with(|source| {
-            let mut ptr = unsafe { NonNull::new_unchecked(source.get()) };
+            // SAFETY: Dereferencing this cell is safe as the value has
+            // been initialised, so it will not be null, and the mut reference
+            // we create here only lives as long as this function's scope. Since
+            // this is thread local, there is only one mut reference alive at any
+            // given moment.
+            let ptr = unsafe { &mut *source.get() };
 
-            FastRng(WyRand::new(unsafe { ptr.as_mut().rand() }))
+            FastRng(WyRand::new(ptr.rand()))
         })
     }
 }

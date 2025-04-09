@@ -1,3 +1,5 @@
+#![warn(clippy::undocumented_unsafe_blocks)]
+
 mod body_stream;
 mod html_gen;
 mod markov;
