@@ -1,6 +1,12 @@
-use std::net::{IpAddr, SocketAddr};
+use std::{
+    convert::Infallible,
+    net::{IpAddr, SocketAddr},
+};
 
-use axum::extract::Request;
+use axum::{
+    extract::{ConnectInfo, FromRequestParts},
+    http::request::Parts,
+};
 use hyper::{HeaderMap, header::FORWARDED};
 use winnow::Parser;
 
@@ -10,21 +16,37 @@ const X_REAL_IP: &str = "x-real-ip";
 const X_FORWARDED_FOR: &str = "x-forwarded-for";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct PeerExtractor;
+#[repr(align(8))]
+pub struct ProxiedPeer(IpAddr);
 
-impl PeerExtractor {
-    pub fn extract<T>(&self, req: &Request<T>) -> Option<IpAddr> {
-        let headers = req.headers();
+impl ProxiedPeer {
+    pub fn extract(headers: &HeaderMap, connection: &ConnectInfo<SocketAddr>) -> Self {
+        Self(
+            maybe_x_forwarded_for(headers)
+                .or_else(|| maybe_x_real_ip(headers))
+                .or_else(|| maybe_forwarded(headers))
+                .unwrap_or_else(|| connection.ip()),
+        )
+    }
 
-        maybe_x_forwarded_for(headers)
-            .or_else(|| maybe_x_real_ip(headers))
-            .or_else(|| maybe_forwarded(headers))
-            .or_else(|| maybe_connect_info(req))
+    pub fn ip(&self) -> IpAddr {
+        self.0
+    }
+}
+
+impl<S: Send + Sync> FromRequestParts<S> for ProxiedPeer {
+    type Rejection = Infallible;
+
+    async fn from_request_parts(req: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        Ok(Self::extract(
+            &req.headers,
+            req.extensions.get::<ConnectInfo<SocketAddr>>().unwrap(),
+        ))
     }
 }
 
 /// Tries to parse the `x-forwarded-for` header
-fn maybe_x_forwarded_for(headers: &HeaderMap) -> Option<IpAddr> {
+pub fn maybe_x_forwarded_for(headers: &HeaderMap) -> Option<IpAddr> {
     headers
         .get(X_FORWARDED_FOR)
         .and_then(|hv| hv.to_str().ok())
@@ -32,7 +54,7 @@ fn maybe_x_forwarded_for(headers: &HeaderMap) -> Option<IpAddr> {
 }
 
 /// Tries to parse the `x-real-ip` header
-fn maybe_x_real_ip(headers: &HeaderMap) -> Option<IpAddr> {
+pub fn maybe_x_real_ip(headers: &HeaderMap) -> Option<IpAddr> {
     headers
         .get(X_REAL_IP)
         .and_then(|hv| hv.to_str().ok())
@@ -40,7 +62,7 @@ fn maybe_x_real_ip(headers: &HeaderMap) -> Option<IpAddr> {
 }
 
 /// Tries to parse `forwarded` headers
-fn maybe_forwarded(headers: &HeaderMap) -> Option<IpAddr> {
+pub fn maybe_forwarded(headers: &HeaderMap) -> Option<IpAddr> {
     headers.get_all(FORWARDED).iter().find_map(|hv| {
         hv.to_str()
             .ok()
@@ -58,11 +80,4 @@ fn maybe_forwarded(headers: &HeaderMap) -> Option<IpAddr> {
                 Identifier::IpAddr(ip_addr) => ip_addr,
             })
     })
-}
-
-/// Looks in `ConnectInfo` extension
-fn maybe_connect_info<T>(req: &Request<T>) -> Option<IpAddr> {
-    req.extensions()
-        .get::<axum::extract::ConnectInfo<SocketAddr>>()
-        .map(|addr| addr.ip())
 }
