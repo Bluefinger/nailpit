@@ -6,6 +6,8 @@ mod markov;
 mod rng;
 mod shutdown;
 mod state;
+mod peer_limiter;
+mod fv_parser;
 
 use std::{
     net::SocketAddr,
