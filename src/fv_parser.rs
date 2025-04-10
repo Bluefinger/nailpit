@@ -8,8 +8,7 @@ use winnow::{
 };
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-/// Remote identifier. This can be an IP:port pair, a bare IP, an underscore-prefixed
-/// "obfuscated string", or unknown.
+/// Remote identifier. This can be an IP:port pair or a bare IP.
 pub enum Identifier {
     SocketAddr(SocketAddr),
     IpAddr(IpAddr),
