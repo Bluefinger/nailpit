@@ -7,7 +7,6 @@ use crate::interner::InternedString;
 
 /// Representation of a string segment.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[repr(transparent)]
 pub struct Token(InternedString);
 
@@ -43,7 +42,6 @@ impl Deref for Token {
 
 /// An owned pair of [`Token`]s.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct TokenPair(pub Token, pub Token);
 
 impl TokenPair {

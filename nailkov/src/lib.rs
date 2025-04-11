@@ -19,7 +19,6 @@ use unicode_segmentation::UnicodeSegmentation;
 use wyrand::RandomWyHashState;
 
 #[derive(Clone, Debug)]
-#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct NailKov<S = RandomWyHashState> {
     chain: HashMap<TokenPair, TokenWeights, S>,
 }
@@ -87,7 +86,6 @@ impl<S: BuildHasher + Clone + Default> NailKov<S> {
 }
 
 #[derive(Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 struct NailBuilder<S = RandomWyHashState> {
     chain: HashMap<TokenPair, TokenWeightsBuilder<S>, S>,
 }
