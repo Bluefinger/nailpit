@@ -1,18 +1,20 @@
 use std::{
-    net::{IpAddr, SocketAddr},
+    net::IpAddr,
     ops::{Deref, DerefMut},
     sync::Arc,
     time::Instant,
 };
 
 use axum::{
-    extract::{ConnectInfo, FromRef, FromRequestParts, Request},
+    extract::{FromRef, FromRequestParts, Request},
     middleware::Next,
     response::Response,
 };
 use hyper::StatusCode;
 use scc::HashMap;
 use wyrand::RandomWyHashState;
+
+use crate::peer::ProxiedPeer;
 
 #[derive(Debug, Clone)]
 pub struct SourceState {
@@ -94,12 +96,14 @@ where
 #[fastrace::trace]
 pub async fn track_incoming_sources(
     sources: SourceMap,
-    source: ConnectInfo<SocketAddr>,
+    proxied: ProxiedPeer,
     request: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
+    let ip = proxied.ip();
+
     let seen = sources
-        .entry_async(source.ip())
+        .entry_async(ip)
         .await
         .and_modify(|source| {
             source.visited += 1;
@@ -110,7 +114,7 @@ pub async fn track_incoming_sources(
             last_seen: Instant::now(),
         });
 
-    log::info!("Saw: {} at {:?}", source.ip(), seen.last_seen);
+    log::info!("Saw: {} at {:?}", ip, seen.last_seen);
 
     Ok(next.run(request).await)
 }
