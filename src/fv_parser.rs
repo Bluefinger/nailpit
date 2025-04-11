@@ -22,12 +22,10 @@ fn match_for<'s>(prefix: &mut &'s str) -> ModalResult<&'s str> {
 /// the port info.
 fn extract_ipv6(identifier: &mut &str) -> ModalResult<IpAddr> {
     literal("\"[").parse_next(identifier)?;
-    let ip = take_until(0.., ']')
-        .parse_to::<IpAddr>()
-        .parse_next(identifier)?;
-    literal("]").parse_next(identifier)?;
-
-    Ok(ip)
+    take_until(0.., ']')
+        .parse_to()
+        .map(IpAddr::V6)
+        .parse_next(identifier)
 }
 
 /// Extracts the IPv4 address from the identifier string. Expects the format
@@ -35,7 +33,10 @@ fn extract_ipv6(identifier: &mut &str) -> ModalResult<IpAddr> {
 /// addresses. The port component `:8080` may or may not be present in the identifier.
 /// For the purposes of `nailpit`, we discard the port info.
 fn extract_ipv4(identifier: &mut &str) -> ModalResult<IpAddr> {
-    take_till(0.., ':').parse_to().parse_next(identifier)
+    take_till(0.., ':')
+        .parse_to()
+        .map(IpAddr::V4)
+        .parse_next(identifier)
 }
 
 /// Extracts the identifier from the Forwarded for value. Attempts to parse the identifier part
@@ -64,7 +65,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn extracts_for() -> color_eyre::Result<()> {
+    fn extracts_for_header_value() -> color_eyre::Result<()> {
         assert_eq!(
             extract_for
                 .parse("for=1.2.3.4")
