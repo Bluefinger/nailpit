@@ -1,66 +1,58 @@
-use std::net::{IpAddr, Ipv6Addr, SocketAddr, SocketAddrV4};
+use std::net::IpAddr;
 
 use winnow::{
     ModalResult, Parser,
-    ascii::{Caseless, digit1},
-    combinator::{alt, opt},
-    token::{literal, rest, take_till, take_until},
+    ascii::Caseless,
+    combinator::alt,
+    stream::Stream,
+    token::{literal, take_till, take_until},
 };
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-/// Remote identifier. This can be an IP:port pair or a bare IP.
-pub enum Identifier {
-    SocketAddr(SocketAddr),
-    IpAddr(IpAddr),
+/// Check if a header value string begins with `for=`, in order to
+/// determine whether it is a valid value for a Forwarded header, and
+/// is a part that we are interested in.
+fn match_for<'s>(prefix: &mut &'s str) -> ModalResult<&'s str> {
+    Caseless("for=").parse_next(prefix)
 }
 
-fn match_for<'s>(s: &mut &'s str) -> ModalResult<&'s str> {
-    Caseless("for=").parse_next(s)
+/// Extracts the IPv6 address from the identifier string. Expects the format
+/// `"[::1]:8080"`. IPv6 addresses in the Forwarded header are always wrapped in `"`,
+/// with the address component wrapped in square brackets. The port component `:8080`
+/// may or may not be present in the identifier. For the purposes of `nailpit`, we discard
+/// the port info.
+fn extract_ipv6(identifier: &mut &str) -> ModalResult<IpAddr> {
+    literal("\"[").parse_next(identifier)?;
+    let ip = take_until(0.., ']')
+        .parse_to::<IpAddr>()
+        .parse_next(identifier)?;
+    literal("]").parse_next(identifier)?;
+
+    Ok(ip)
 }
 
-fn match_port(s: &mut &str) -> ModalResult<Option<u16>> {
-    Ok(opt((":", digit1))
-        .parse_next(s)?
-        .and_then(|(_, b)| b.parse::<u16>().ok()))
+/// Extracts the IPv4 address from the identifier string. Expects the format
+/// `192.168.0.1:8080`. IPv4 addresses are not wrapped with `"` in contrast to IPv6
+/// addresses. The port component `:8080` may or may not be present in the identifier.
+/// For the purposes of `nailpit`, we discard the port info.
+fn extract_ipv4(identifier: &mut &str) -> ModalResult<IpAddr> {
+    take_till(0.., ':').parse_to().parse_next(identifier)
 }
 
-fn extract_ipv6(s: &mut &str) -> ModalResult<Identifier> {
-    literal("\"[").parse_next(s)?;
-    let ip = take_until(0.., ']').parse_to::<Ipv6Addr>().parse_next(s)?;
-    literal("]").parse_next(s)?;
-    let port = match_port.parse_next(s)?;
-
-    match (ip, port) {
-        (ip, None) => Ok(Identifier::IpAddr(IpAddr::V6(ip))),
-        (ip, Some(port)) => Ok(Identifier::SocketAddr(SocketAddr::new(
-            IpAddr::V6(ip),
-            port,
-        ))),
-    }
+/// Extracts the identifier from the Forwarded for value. Attempts to parse the identifier part
+/// as either an IPv6 address or IPv4 address. The Forwarded for format supports more identifier
+/// types, but we discard those as they are useless to us.
+fn extract_identifier(identifier: &mut &str) -> ModalResult<IpAddr> {
+    alt((extract_ipv6, extract_ipv4)).parse_next(identifier)
 }
 
-fn extract_ipv4(s: &mut &str) -> ModalResult<Identifier> {
-    let ip = take_till(0.., ':').parse_to().parse_next(s)?;
-    let port = match_port.parse_next(s)?;
+/// Extracts the identifier from the Forwarded for value. First it checks for the correct
+/// prefix `for=`, then attempts to extract the identifier.
+pub fn extract_for(header_part: &mut &str) -> ModalResult<IpAddr> {
+    match_for.parse_next(header_part)?;
 
-    match (ip, port) {
-        (ip, None) => Ok(Identifier::IpAddr(IpAddr::V4(ip))),
-        (ip, Some(port)) => Ok(Identifier::SocketAddr(SocketAddr::V4(SocketAddrV4::new(
-            ip, port,
-        )))),
-    }
-}
+    let id = extract_identifier.parse_next(header_part)?;
 
-fn extract_identifier(s: &mut &str) -> ModalResult<Identifier> {
-    alt((extract_ipv6, extract_ipv4)).parse_next(s)
-}
-
-pub fn extract_for(s: &mut &str) -> ModalResult<Identifier> {
-    match_for.parse_next(s)?;
-
-    let id = extract_identifier.parse_next(s)?;
-
-    rest.parse_next(s)?;
+    header_part.finish();
 
     Ok(id)
 }
@@ -77,31 +69,28 @@ mod tests {
             extract_for
                 .parse("for=1.2.3.4")
                 .map_err(|a| color_eyre::eyre::eyre!("Identifier parsing error:\n{a}"))?,
-            Identifier::IpAddr(IpAddr::V4(Ipv4Addr::new(1, 2, 3, 4)))
+            IpAddr::V4(Ipv4Addr::new(1, 2, 3, 4))
         );
 
         assert_eq!(
             extract_for
                 .parse("fOr=1.2.3.4:1234")
                 .map_err(|a| color_eyre::eyre::eyre!("Identifier parsing error:\n{a}"))?,
-            Identifier::SocketAddr(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(1, 2, 3, 4)), 1234))
+            IpAddr::V4(Ipv4Addr::new(1, 2, 3, 4))
         );
 
         assert_eq!(
             extract_for
                 .parse("FoR=\"[::1]:1234\"")
                 .map_err(|a| color_eyre::eyre::eyre!("Identifier parsing error:\n{a}"))?,
-            Identifier::SocketAddr(SocketAddr::new(
-                IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)),
-                1234
-            ))
+            IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1))
         );
 
         assert_eq!(
             extract_for
                 .parse("FOR=\"[::1]\"")
                 .map_err(|a| color_eyre::eyre::eyre!("Identifier parsing error:\n{a}"))?,
-            Identifier::IpAddr(IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)))
+            IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1))
         );
 
         Ok(())

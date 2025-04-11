@@ -1,83 +1,88 @@
-use std::{
-    convert::Infallible,
-    net::{IpAddr, SocketAddr},
-};
+use std::net::{IpAddr, SocketAddr};
 
 use axum::{
     extract::{ConnectInfo, FromRequestParts},
     http::request::Parts,
 };
-use hyper::{HeaderMap, header::FORWARDED};
+use hyper::{HeaderMap, StatusCode, header::FORWARDED};
 use winnow::Parser;
 
-use crate::fv_parser::{Identifier, extract_for};
+use crate::fv_parser::extract_for;
 
 const X_REAL_IP: &str = "x-real-ip";
 const X_FORWARDED_FOR: &str = "x-forwarded-for";
 
+/// Extractor for obtaining an IP address from the request. Attempts to pull the IP from
+/// various headers expected from a reverse proxied connection, else falls back to [`ConnectInfo`]
+/// to get at least something if `nailpit` is not behind a proxy. If it can't get anything, then
+/// something is seriously wrong.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(align(8))]
 pub struct ProxiedPeer(IpAddr);
 
 impl ProxiedPeer {
-    pub fn extract(headers: &HeaderMap, connection: &ConnectInfo<SocketAddr>) -> Self {
-        Self(
-            maybe_x_forwarded_for(headers)
-                .or_else(|| maybe_x_real_ip(headers))
-                .or_else(|| maybe_forwarded(headers))
-                .unwrap_or_else(|| connection.ip()),
-        )
+    /// Extracts the IP address from either the request headers, or from the [`ConnectInfo`] extension
+    /// if it can't. Returns `None` if it finds nothing.
+    pub fn extract(
+        headers: &HeaderMap,
+        connection: Option<&ConnectInfo<SocketAddr>>,
+    ) -> Option<Self> {
+        maybe_x_forwarded_for(headers)
+            .or_else(|| maybe_x_real_ip(headers))
+            .or_else(|| maybe_forwarded(headers))
+            .or_else(|| connection.map(|connect_info| connect_info.ip()))
+            .map(Self)
     }
 
+    /// Returns the extracted [`IpAddr`].
     pub fn ip(&self) -> IpAddr {
         self.0
     }
 }
 
 impl<S: Send + Sync> FromRequestParts<S> for ProxiedPeer {
-    type Rejection = Infallible;
+    type Rejection = (StatusCode, &'static str);
 
     async fn from_request_parts(req: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        Ok(Self::extract(
+        Self::extract(
             &req.headers,
-            req.extensions.get::<ConnectInfo<SocketAddr>>().unwrap(),
-        ))
+            req.extensions.get::<ConnectInfo<SocketAddr>>(),
+        )
+        .ok_or((StatusCode::FORBIDDEN, "What are you hiding?"))
     }
 }
 
 /// Tries to parse the `x-forwarded-for` header
-pub fn maybe_x_forwarded_for(headers: &HeaderMap) -> Option<IpAddr> {
+fn maybe_x_forwarded_for(headers: &HeaderMap) -> Option<IpAddr> {
     headers
         .get(X_FORWARDED_FOR)
-        .and_then(|hv| hv.to_str().ok())
-        .and_then(|s| s.split(',').find_map(|s| s.trim().parse::<IpAddr>().ok()))
+        .and_then(|header_value| header_value.to_str().ok())
+        .and_then(|header| {
+            header
+                .split(',')
+                .map(str::trim)
+                .filter(|&header_parts| !header_parts.is_empty())
+                .find_map(|part| part.parse().ok())
+        })
 }
 
 /// Tries to parse the `x-real-ip` header
-pub fn maybe_x_real_ip(headers: &HeaderMap) -> Option<IpAddr> {
+fn maybe_x_real_ip(headers: &HeaderMap) -> Option<IpAddr> {
     headers
         .get(X_REAL_IP)
-        .and_then(|hv| hv.to_str().ok())
-        .and_then(|s| s.parse::<IpAddr>().ok())
+        .and_then(|header_value| header_value.to_str().ok())
+        .and_then(|header| header.trim().parse().ok())
 }
 
 /// Tries to parse `forwarded` headers
-pub fn maybe_forwarded(headers: &HeaderMap) -> Option<IpAddr> {
-    headers.get_all(FORWARDED).iter().find_map(|hv| {
-        hv.to_str()
-            .ok()
-            .and_then(|s| {
-                for sl in s.trim().split([',', ';']).filter(|&a| !a.is_empty()) {
-                    if let Ok(ip) = extract_for.parse(sl) {
-                        return Some(ip);
-                    }
-                }
-
-                None
-            })
-            .map(|f| match f {
-                Identifier::SocketAddr(socket_addr) => socket_addr.ip(),
-                Identifier::IpAddr(ip_addr) => ip_addr,
-            })
+fn maybe_forwarded(headers: &HeaderMap) -> Option<IpAddr> {
+    headers.get_all(FORWARDED).iter().find_map(|header_value| {
+        header_value.to_str().ok().and_then(|header| {
+            header
+                .split(&[',', ';'])
+                .map(str::trim)
+                .filter(|&header_parts| !header_parts.is_empty())
+                .find_map(|header_parts| extract_for.parse(header_parts).ok())
+        })
     })
 }
