@@ -35,6 +35,7 @@ impl ProxiedPeer {
     }
 
     /// Returns the extracted [`IpAddr`].
+    #[inline]
     pub fn ip(&self) -> IpAddr {
         self.0
     }
