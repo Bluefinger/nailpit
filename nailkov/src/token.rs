@@ -1,8 +1,5 @@
 use std::ops::Deref;
 
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
-
 use crate::interner::InternedString;
 
 /// Representation of a string segment.
