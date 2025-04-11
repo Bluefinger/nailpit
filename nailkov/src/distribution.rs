@@ -11,7 +11,6 @@ use crate::{error::NailError, token::Token};
 
 /// A distribution of choices and their likelihood.
 #[derive(Clone, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct TokenWeights {
     /// Mappings of choice indexes to their likelihood.
     dist: WeightedAliasIndex<u64>,
@@ -29,7 +28,6 @@ impl Distribution<Token> for TokenWeights {
 
 /// Builder for [`TokenWeights`].
 #[derive(Clone, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct TokenWeightsBuilder<S = RandomWyHashState> {
     /// Counts how many times a token is likely to appear.
     occurrences: HashMap<Token, u64, S>,

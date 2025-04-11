@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+env:
+  RUSTFLAGS: -D warnings
+  RUST_BACKTRACE: 1
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  CARGO_PROFILE_TEST_DEBUG: 0
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        rust: [nightly, beta, stable]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install Rust
+        # --no-self-update is necessary because the windows environment cannot self-update rustup.exe.
+        run: rustup update ${{ matrix.rust }} --no-self-update && rustup default ${{ matrix.rust }}
+      - uses: Swatinem/rust-cache@v2
+        # Install Clippy if we are on a nightly run.
+      - name: Install Clippy
+        run: rustup component add clippy
+        if: startsWith(matrix.rust, 'nightly')
+      - name: Install alsa and udev
+        run: sudo apt-get update; sudo apt-get install --no-install-recommends libasound2-dev libudev-dev
+        if: startsWith(matrix.os, 'ubuntu')
+      - name: Run clippy
+        run: cargo clippy --locked --workspace --all-features --all-targets -- -Dwarnings
+        if: startsWith(matrix.rust, 'nightly')
+      - name: No Default Feature checks
+        run: cargo check --locked --workspace
+      - name: Test with all features enabled
+        run: cargo test --locked --workspace
+
+  miri:
+    name: "Miri"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v3
+      - uses: Swatinem/rust-cache@v2
+      - name: Install Miri
+        run: |
+          rustup toolchain install nightly --component miri
+          rustup override set nightly
+          cargo miri setup
+      - name: Test with Miri
+        run: cargo miri test --locked -p nailkov
+        env:
+          # -Zrandomize-layout makes sure we dont rely on the layout of anything that might change
+          RUSTFLAGS: -Zrandomize-layout
+          # https://github.com/rust-lang/miri#miri--z-flags-and-environment-variables
+          # -Zmiri-disable-isolation is needed because our executor uses `fastrand` which accesses system time.
+          # -Zmiri-permissive-provenance disables warnings against int2ptr casts (since those are used by once_cell)
+          # -Zmiri-ignore-leaks is necessary because a bunch of tests don't join all threads before finishing.
+          # MIRIFLAGS: -Zmiri-ignore-leaks -Zmiri-disable-isolation -Zmiri-permissive-provenance
+  msrv:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v3
+      - name: get MSRV
+        run: |
+          msrv=`cargo metadata --no-deps --format-version 1 | jq --raw-output '.packages[] | select(.name=="wyrand") | .rust_version'`
+          echo "MSRV=$msrv" >> $GITHUB_ENV
+      - name: Install Rust
+        run: rustup update ${{ env.MSRV }} --no-self-update && rustup default ${{ env.MSRV }}
+      - uses: Swatinem/rust-cache@v2
+      - name: Run cargo check
+        id: check
+        run: cargo check --locked
