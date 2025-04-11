@@ -187,8 +187,9 @@ mod tests {
                 InternedString(5)
             ]
         );
-        assert_eq!(interner.stored.len(), 2);
-        assert_eq!(interner.stored[1].capacity(), 64);
+        assert_eq!(interner.buffer.capacity(), 64);
+        assert_eq!(interner.stored.len(), 1);
+        assert_eq!(interner.stored[0].capacity(), 32);
     }
 
     #[test]
