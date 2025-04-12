@@ -73,7 +73,7 @@ async fn nailpit_axum(
     let health_listener = tokio::net::TcpListener::bind("0.0.0.0:3001").await?;
 
     log::info!(
-        "listening on http://{} & http://{}",
+        "listening on http://{} & http://{}/health",
         listener.local_addr()?,
         health_listener.local_addr()?
     );
