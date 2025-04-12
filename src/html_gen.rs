@@ -1,8 +1,9 @@
 use std::iter::once;
 
 use bytes::{Bytes, BytesMut};
-use nailkov::{interner::Interner, NailKov};
-use rand::{Rng, RngCore};
+use nailkov::{NailKov, interner::Interner};
+use rand::{Rng, RngCore, distr::Alphanumeric};
+use std::iter::repeat_with;
 
 use crate::INTERNER;
 
@@ -64,6 +65,29 @@ pub fn header(chain: &NailKov, size: usize, rng: &mut impl RngCore) -> Bytes {
             .chain(text_generator(&interner, chain, size, rng))
             .chain(once("</h2>\n")),
     )
+}
+
+pub fn footer(rng: &mut impl RngCore) -> Bytes {
+    let total_links = rng.random_range(1..=4);
+
+    let link = repeat_with(|| {
+        rng.sample_iter(Alphanumeric)
+            .take(16)
+            .map(|a| a as char)
+            .collect::<String>()
+    })
+    .enumerate();
+
+    let mut footer = String::from("</article></main>\n<footer><nav><ul>");
+
+    for (i, link) in link.take(total_links) {
+        let link = format!("<li><a href=\"/private{}\">{}</a></li>", link, i + 1);
+        footer = [footer, link].concat();
+    }
+
+    footer.push_str("</ul></nav></footer>\n</body>\n</html>");
+
+    Bytes::from(footer)
 }
 
 #[inline]
