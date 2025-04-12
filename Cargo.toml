@@ -19,7 +19,7 @@ rand_distr = { version = "0.5.1" }
 wyrand = { version = "0.3.2", features = ["wyhash", "fully_randomised_wyhash"] }
 hashbrown = { version = "0.15.2", default-features = false, features = [
     "equivalent",
-    "inline-more"
+    "inline-more",
 ] }
 unicode-segmentation = "1.12.0"
 itertools = "0.14.0"
@@ -40,17 +40,10 @@ tracing = ["fastrace/enable"]
 
 [dependencies]
 nailkov = { path = "nailkov" }
-axum = { version = "0.8.1", default-features = false, features = [
-    "tokio",
-    "http1",
-    "http2",
-] }
+axum = { version = "0.8.1", default-features = false, features = ["tokio", "http1", "http2"] }
 axum-core = { version = "0.5.0", default-features = false }
 hyper = { version = "1.6.0", default-features = false, features = ["server"] }
-hyper-util = { version = "0.1.10", default-features = false, features = [
-    "server",
-    "server-auto",
-] }
+hyper-util = { version = "0.1.10", default-features = false, features = ["server", "server-auto"] }
 tokio = { version = "1.44.2", features = [
     "rt",
     "rt-multi-thread",
@@ -78,7 +71,12 @@ futures-lite = "2.6.0"
 scc = "2.3.3"
 parking_lot.workspace = true
 winnow = { version = "0.7.6", features = ["simd"] }
-tower-http = { version = "0.6.2", features = ["compression-br", "compression-gzip", "compression-zstd", "normalize-path"] }
+tower-http = { version = "0.6.2", features = [
+    "compression-br",
+    "compression-gzip",
+    "compression-zstd",
+    "normalize-path",
+] }
 
 [profile.release]
 codegen-units = 1
