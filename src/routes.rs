@@ -8,7 +8,7 @@ use axum::{
 };
 use hyper::StatusCode;
 use tower::{ServiceBuilder, buffer::BufferLayer, limit::RateLimitLayer};
-use tower_http::normalize_path::NormalizePathLayer;
+use tower_http::{compression::CompressionLayer, normalize_path::NormalizePathLayer};
 
 use crate::{
     GEN_HEADER, INDEX, MARKOV,
@@ -42,7 +42,8 @@ pub fn nail_app(state: ServerState) -> Router {
             .layer(axum::middleware::from_fn_with_state(
                 state,
                 track_incoming_sources,
-            )),
+            ))
+            .layer(CompressionLayer::new().quality(tower_http::CompressionLevel::Default)),
     )
 }
 
@@ -50,4 +51,8 @@ pub fn nail_route() -> Router {
     Router::new()
         .route("/", get(handler))
         .nest("/private", Router::new().fallback(get(generated)))
+}
+
+pub fn nail_health() -> Router {
+    Router::new().route("/health", get(async || StatusCode::NO_CONTENT))
 }

@@ -18,14 +18,14 @@ use std::{
 
 use axum::http::HeaderValue;
 use color_eyre::Result;
-use futures_concurrency::future::Race;
+use futures_concurrency::future::{Race, TryJoin};
 use hyper::{HeaderMap, header::CONTENT_TYPE};
 use logforth::append;
 use logforth::filter::EnvFilter;
 use markov::MarkovGen;
 use nailkov::interner::Interner;
 use parking_lot::RwLock;
-use routes::nail_app;
+use routes::{nail_app, nail_health};
 use shutdown::{shutdown_task, wait_for_shutdown};
 use state::ServerState;
 use tokio::time::interval_at;
@@ -70,20 +70,38 @@ async fn nailpit_axum(
     shutdown_notifier: Arc<tokio::sync::watch::Sender<()>>,
 ) -> Result<()> {
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
+    let health_listener = tokio::net::TcpListener::bind("0.0.0.0:3001").await?;
 
-    log::info!("listening on http://{}", listener.local_addr()?);
+    log::info!(
+        "listening on http://{} & http://{}",
+        listener.local_addr()?,
+        health_listener.local_addr()?
+    );
 
     let app = nail_app(state);
 
-    tokio::spawn(
-        axum::serve(
-            listener,
-            app.into_make_service_with_connect_info::<SocketAddr>(),
+    let generator_app = async {
+        tokio::spawn(
+            axum::serve(
+                listener,
+                app.into_make_service_with_connect_info::<SocketAddr>(),
+            )
+            .with_graceful_shutdown(wait_for_shutdown(shutdown_notifier.clone()))
+            .into_future(),
         )
-        .with_graceful_shutdown(wait_for_shutdown(shutdown_notifier))
-        .into_future(),
-    )
-    .await??;
+        .await?
+    };
+
+    let health_app = async {
+        tokio::spawn(
+            axum::serve(health_listener, nail_health())
+                .with_graceful_shutdown(wait_for_shutdown(shutdown_notifier.clone()))
+                .into_future(),
+        )
+        .await?
+    };
+
+    (generator_app, health_app).try_join().await?;
 
     Ok(())
 }
