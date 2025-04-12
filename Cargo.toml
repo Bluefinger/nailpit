@@ -78,6 +78,7 @@ futures-lite = "2.6.0"
 scc = "2.3.3"
 parking_lot.workspace = true
 winnow = { version = "0.7.6", features = ["simd"] }
+tower-http = { version = "0.6.2", features = ["normalize-path"] }
 
 [profile.release]
 codegen-units = 1

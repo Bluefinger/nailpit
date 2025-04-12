@@ -4,12 +4,12 @@ use bytes::{Bytes, BytesMut};
 use color_eyre::Result;
 use futures_lite::Stream;
 use nailkov::NailKov;
-use rand::{Rng, distr::Alphanumeric};
+use rand::Rng;
 use tokio::sync::mpsc;
 
 use crate::{
     INTERNER,
-    html_gen::{header, paragraph, title},
+    html_gen::{footer, header, paragraph, title},
     rng::FastRng,
 };
 
@@ -133,9 +133,11 @@ impl MarkovGen {
                     "Time limit was reached ({} s), breaking stream",
                     time_limit_duration.as_secs()
                 );
-                let final_str = BytesMut::from("</article></main>\n</body>\n</html>");
+                let mut rng = FastRng::default();
 
-                tx.send(final_str.freeze()).await.ok();
+                let final_str = footer(&mut rng);
+
+                tx.send(final_str).await.ok();
                 return;
             }
 
@@ -157,23 +159,7 @@ impl MarkovGen {
             if size_limit != 0 && bytes_written >= size_limit {
                 let mut rng = FastRng::default();
 
-                let link_one = (&mut rng)
-                    .sample_iter(Alphanumeric)
-                    .take(16)
-                    .map(|a| a as char)
-                    .collect::<String>();
-                let link_two = (&mut rng)
-                    .sample_iter(Alphanumeric)
-                    .take(16)
-                    .map(|a| a as char)
-                    .collect::<String>();
-
-                let footer = format!(
-                    "</article></main>\n<footer><nav><ul><li><a href=\"/private/{}\">More</a></li><li><a href=\"/private/{}\">Things</a></li></ul></nav></footer></body>\n</html>",
-                    link_one, link_two
-                );
-
-                let final_str = Bytes::from(footer);
+                let final_str = footer(&mut rng);
 
                 tx.send(final_str).await.ok();
 

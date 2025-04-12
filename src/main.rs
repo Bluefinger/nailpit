@@ -1,13 +1,14 @@
 #![warn(clippy::undocumented_unsafe_blocks)]
 
 mod body_stream;
+mod fv_parser;
 mod html_gen;
 mod markov;
+mod peer;
 mod rng;
+mod routes;
 mod shutdown;
 mod state;
-mod peer;
-mod fv_parser;
 
 use std::{
     net::SocketAddr,
@@ -15,28 +16,19 @@ use std::{
     time::{Duration, Instant},
 };
 
-use axum::{
-    BoxError, Router,
-    error_handling::HandleErrorLayer,
-    extract::ConnectInfo,
-    http::HeaderValue,
-    response::{Html, IntoResponse},
-    routing::get,
-};
-use body_stream::BodyStream;
+use axum::http::HeaderValue;
 use color_eyre::Result;
 use futures_concurrency::future::Race;
-use hyper::{HeaderMap, StatusCode, header::CONTENT_TYPE};
+use hyper::{HeaderMap, header::CONTENT_TYPE};
 use logforth::append;
 use logforth::filter::EnvFilter;
 use markov::MarkovGen;
 use nailkov::interner::Interner;
 use parking_lot::RwLock;
+use routes::nail_route;
 use shutdown::{shutdown_task, wait_for_shutdown};
-use state::{ServerState, track_incoming_sources};
+use state::ServerState;
 use tokio::time::interval_at;
-use tower::{ServiceBuilder, buffer::BufferLayer, limit::RateLimitLayer};
-
 static INDEX: &str = include_str!("../templates/warning.html");
 
 const SOURCE_TIMEOUT: Duration = Duration::from_secs(60 * 2);
@@ -54,18 +46,6 @@ static INTERNER: LazyLock<Arc<RwLock<Interner>>> = LazyLock::new(Default::defaul
 
 static MARKOV: LazyLock<MarkovGen> =
     LazyLock::new(|| MarkovGen::new(256, "./input/markov.txt").unwrap());
-
-#[fastrace::trace]
-async fn handler(source: ConnectInfo<SocketAddr>) -> Html<&'static str> {
-    log::info!("Into the tarpit, {}", source.ip());
-
-    Html(INDEX)
-}
-
-#[fastrace::trace]
-async fn generated() -> impl IntoResponse {
-    BodyStream::from_stream(MARKOV.clone().into_stream()).headers(GEN_HEADER.clone())
-}
 
 #[fastrace::trace]
 async fn nailpit_cleanup(state: ServerState) {
@@ -93,31 +73,7 @@ async fn nailpit_axum(
 
     log::info!("listening on http://{}", listener.local_addr()?);
 
-    let app = Router::new()
-        .route("/", get(handler))
-        .nest(
-            "/private",
-            Router::new()
-                .route("/", get(generated))
-                .fallback(get(generated)),
-        )
-        .layer(
-            ServiceBuilder::new()
-                .layer(fastrace_axum::FastraceLayer)
-                .layer(HandleErrorLayer::new(|err: BoxError| async move {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Unhandled Error: {err}"),
-                    )
-                }))
-                .layer(BufferLayer::new(1024))
-                .layer(RateLimitLayer::new(1000, Duration::from_secs(60 * 5)))
-                .layer(axum::middleware::from_fn_with_state(
-                    state.clone(),
-                    track_incoming_sources,
-                )),
-        )
-        .with_state(state);
+    let app = nail_route(state);
 
     tokio::spawn(
         axum::serve(
