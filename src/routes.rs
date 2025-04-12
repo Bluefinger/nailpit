@@ -26,30 +26,28 @@ async fn generated() -> impl IntoResponse {
     BodyStream::from_stream(MARKOV.clone().into_stream()).headers(GEN_HEADER.clone())
 }
 
-pub fn nail_route(state: ServerState) -> Router {
+pub fn nail_app(state: ServerState) -> Router {
+    nail_route().layer(
+        ServiceBuilder::new()
+            .layer(fastrace_axum::FastraceLayer)
+            .layer(HandleErrorLayer::new(|err: BoxError| async move {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Unhandled Error: {err}"),
+                )
+            }))
+            .layer(BufferLayer::new(1024))
+            .layer(RateLimitLayer::new(1000, Duration::from_secs(60)))
+            .layer(NormalizePathLayer::trim_trailing_slash())
+            .layer(axum::middleware::from_fn_with_state(
+                state,
+                track_incoming_sources,
+            )),
+    )
+}
+
+pub fn nail_route() -> Router {
     Router::new()
         .route("/", get(handler))
-        .nest(
-            "/private",
-            Router::new()
-                .fallback(get(generated)),
-        )
-        .layer(
-            ServiceBuilder::new()
-                .layer(fastrace_axum::FastraceLayer)
-                .layer(HandleErrorLayer::new(|err: BoxError| async move {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Unhandled Error: {err}"),
-                    )
-                }))
-                .layer(BufferLayer::new(1024))
-                .layer(RateLimitLayer::new(1000, Duration::from_secs(60)))
-                .layer(NormalizePathLayer::trim_trailing_slash())
-                .layer(axum::middleware::from_fn_with_state(
-                    state.clone(),
-                    track_incoming_sources,
-                )),
-        )
-        .with_state(state)
+        .nest("/private", Router::new().fallback(get(generated)))
 }

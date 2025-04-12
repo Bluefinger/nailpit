@@ -25,7 +25,7 @@ use logforth::filter::EnvFilter;
 use markov::MarkovGen;
 use nailkov::interner::Interner;
 use parking_lot::RwLock;
-use routes::nail_route;
+use routes::nail_app;
 use shutdown::{shutdown_task, wait_for_shutdown};
 use state::ServerState;
 use tokio::time::interval_at;
@@ -73,7 +73,7 @@ async fn nailpit_axum(
 
     log::info!("listening on http://{}", listener.local_addr()?);
 
-    let app = nail_route(state);
+    let app = nail_app(state);
 
     tokio::spawn(
         axum::serve(
