@@ -68,7 +68,7 @@ pub fn header(chain: &NailKov, size: usize, rng: &mut impl RngCore) -> Bytes {
 }
 
 pub fn footer(rng: &mut impl RngCore) -> Bytes {
-    let total_links = rng.random_range(2..=4);
+    let total_links = rng.random_range(1..=4);
 
     let link = repeat_with(|| {
         rng.sample_iter(Alphanumeric)
@@ -81,7 +81,7 @@ pub fn footer(rng: &mut impl RngCore) -> Bytes {
     let mut footer = String::from("</article></main>\n<footer><nav><ul>");
 
     for (i, link) in link.take(total_links) {
-        let link = format!("<li><a href=\"{}\">{}</a></li>", link, i + 1);
+        let link = format!("<li><a href=\"/private{}\">{}</a></li>", link, i + 1);
         footer = [footer, link].concat();
     }
 
