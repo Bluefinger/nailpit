@@ -103,16 +103,13 @@ impl MarkovGen {
                     "Time limit was reached ({} s), breaking stream",
                     time_limit_duration.as_secs()
                 );
-
-                let final_str = footer(&mut rng);
-
-                tx.send(final_str).await.ok();
-                return;
+                break;
             }
 
             let content = MarkovGen::generate(self.chain.as_ref(), desired_size, &mut rng);
 
             let content_size = content.len();
+
             if tx.send(content).await.is_ok() {
                 bytes_written += content_size;
             } else {
@@ -120,22 +117,22 @@ impl MarkovGen {
                     "Stream broken, wrote {:.2} MB",
                     (bytes_written as f64) * 1e-6
                 );
-                break;
+                return;
             };
 
             if size_limit != 0 && bytes_written >= size_limit {
-                let final_str = footer(&mut rng);
-
-                tx.send(final_str).await.ok();
-
                 log::info!(
                     "Size limit was reached ({:.2} MB in {}us",
                     (bytes_written as f64) * 1e-6,
                     start_time.elapsed().as_micros()
                 );
-                return;
+                break;
             }
         }
+
+        let final_str = footer(&mut rng);
+
+        tx.send(final_str).await.ok();
     }
 
     #[fastrace::trace]
