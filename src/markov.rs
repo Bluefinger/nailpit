@@ -4,7 +4,7 @@ use bytes::{Bytes, BytesMut};
 use color_eyre::Result;
 use futures_lite::Stream;
 use nailkov::NailKov;
-use rand::Rng;
+use rand::{Rng, RngCore};
 use tokio::sync::mpsc;
 
 use crate::{
@@ -33,57 +33,39 @@ impl MarkovGen {
         Ok(Self { chain, size })
     }
 
-    #[fastrace::trace]
-    fn generate(chain: Arc<NailKov>, desired_size: usize, tx: mpsc::Sender<Bytes>) {
-        let mut rng = FastRng::default();
-
-        let mut buffer = BytesMut::new();
-
-        let (title, content) = title(chain.as_ref(), desired_size, &mut rng);
-
-        if tx.blocking_send(title).is_err() {
-            return;
-        }
-
-        buffer.extend(content);
+    fn generate(chain: &NailKov, desired_size: usize, rng: &mut impl RngCore) -> Bytes {
+        let mut buffer = BytesMut::with_capacity(8192);
 
         loop {
             // We can generate more before handing it off to be streamed to the client,
             // A bit more latency, but much more throughput, and friendlier to being compressed.
-            // If the channel errors, then it is closed and we can break out of the loop.
-            if buffer.len() >= 4096
-                && tx
-                    .blocking_send(core::mem::take(&mut buffer).freeze())
-                    .is_err()
-            {
-                break;
+            if buffer.len() >= 4096 {
+                return buffer.freeze();
             }
 
             // Randomise how many paragraphs we want per section
             let max_paras: u32 = rng.random_range(1..=4);
 
-            buffer.extend(header(chain.as_ref(), 24, &mut rng));
+            buffer.extend(header(chain, 24, rng));
 
             for _ in 0..max_paras {
-                buffer.extend(paragraph(chain.as_ref(), desired_size, &mut rng));
+                buffer.extend(paragraph(chain, desired_size, rng));
             }
         }
     }
 
     #[fastrace::trace]
-    pub fn start(&self, tx: mpsc::Sender<Bytes>) {
-        let desired_size = self.size.max(128);
-        let chain = self.chain.clone();
-
-        tokio::task::spawn_blocking(move || MarkovGen::generate(chain, desired_size, tx));
-    }
-
-    #[fastrace::trace]
     async fn spawn_generator(self, tx: mpsc::Sender<Bytes>) {
-        let (gen_tx, mut generator) = mpsc::channel(4);
-        self.start(gen_tx);
         let mut bytes_written = 0_usize;
         let start_time = std::time::Instant::now();
+        let desired_size = self.size.max(128);
+        let mut rng = FastRng::default();
+
+        let (title, content) = title(
+            self.chain.as_ref(),
+            desired_size,
+            &mut rng,
+        );
 
         // For the first payload we want to make it look like an HTML page.
         // We want to ensure it has a unique title that matches the article header, so to
@@ -95,11 +77,7 @@ impl MarkovGen {
     "#,
         );
 
-        if let Some(title) = generator.recv().await {
-            initial_payload.extend(title);
-        } else {
-            return;
-        }
+        initial_payload.extend(title);
 
         initial_payload.extend(
             r#"    <meta charset="utf-8" />
@@ -109,10 +87,6 @@ impl MarkovGen {
 <body><main><article>"#
                 .bytes(),
         );
-
-        let Some(content) = generator.recv().await else {
-            return;
-        };
 
         initial_payload.extend(content);
 
@@ -133,7 +107,6 @@ impl MarkovGen {
                     "Time limit was reached ({} s), breaking stream",
                     time_limit_duration.as_secs()
                 );
-                let mut rng = FastRng::default();
 
                 let final_str = footer(&mut rng);
 
@@ -141,9 +114,7 @@ impl MarkovGen {
                 return;
             }
 
-            let Some(content) = generator.recv().await else {
-                return;
-            };
+            let content = MarkovGen::generate(self.chain.as_ref(), desired_size, &mut rng);
 
             let content_size = content.len();
             if tx.send(content).await.is_ok() {
@@ -157,8 +128,6 @@ impl MarkovGen {
             };
 
             if size_limit != 0 && bytes_written >= size_limit {
-                let mut rng = FastRng::default();
-
                 let final_str = footer(&mut rng);
 
                 tx.send(final_str).await.ok();
