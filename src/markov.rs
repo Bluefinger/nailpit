@@ -61,11 +61,7 @@ impl MarkovGen {
         let desired_size = self.size.max(128);
         let mut rng = FastRng::default();
 
-        let (title, content) = title(
-            self.chain.as_ref(),
-            desired_size,
-            &mut rng,
-        );
+        let (title, content) = title(self.chain.as_ref(), desired_size, &mut rng);
 
         // For the first payload we want to make it look like an HTML page.
         // We want to ensure it has a unique title that matches the article header, so to
@@ -144,7 +140,7 @@ impl MarkovGen {
 
     #[fastrace::trace]
     pub fn into_stream(self) -> impl Stream<Item = Bytes> {
-        let (tx, rx) = mpsc::channel::<Bytes>(4);
+        let (tx, rx) = mpsc::channel::<Bytes>(8);
 
         tokio::spawn(self.spawn_generator(tx));
 
