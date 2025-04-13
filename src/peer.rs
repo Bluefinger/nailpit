@@ -44,6 +44,7 @@ impl ProxiedPeer {
 impl<S: Send + Sync> FromRequestParts<S> for ProxiedPeer {
     type Rejection = (StatusCode, &'static str);
 
+    #[fastrace::trace]
     async fn from_request_parts(req: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
         Self::extract(
             &req.headers,
