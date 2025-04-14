@@ -57,3 +57,15 @@ The idea here is we only employ `unsafe` code where necessary. Make use of tools
 ## Where to go from here?
 
 Still interested in contributing? Check out the [roadmap here](https://github.com/Bluefinger/nailpit/issues/2) if you need a high-level view of what the goals are and what needs to be worked on. That should give you a general idea of what the state of the project is and what to take on in terms of tasks.
+
+## But why no AI?
+
+As the maintainer of this project, I expect any and all contributors to truly understand the code they are contributing. What does it do? What are the pros of the approach? What are the cons and trade-offs? I am not expecting super high quality code, but I am expecting code that has been crafted with full understanding of that implementation. This has benefits for both myself a maintainer and for you as a contributor:
+
+1. Code that is understood is more easily maintained. Knowing what are the edge-cases helps narrow down sources of bugs and providing suitable fixes, and also allows for future work to be planned around the provided code.
+2. Code that is understood is less likely to need to be constantly refactored, reducing churn and tech-debt.
+3. Code that is understood is easier to write accurate documentation for, and provide examples for. And during code review, you'll be able to explain what you've done more confidently.
+
+By using an AI/LLM to generate the code, you are trading this understanding for speed and convenience. But for Open Source software, what matters more is providing code that others can understand and maintain. You might contribute a feature, but that feature will then need to be maintained by myself and others in the future, so ensuring everything is clear and well documented is of vital importance. If you can't code a feature without the assistance of an AI tool, then you can't code with any level of understanding. But it isn't hard to do so! It just might take longer (and you might learn a few things in the process by doing so).
+
+Other reasons for not wanting AI/LLM generated contributions is for legal reasons (questions regarding copyright & licensing violations on data which these models are trained on), and ethical reasons (such as the power consumption and exorbitant water requirements these models require). Best to avoid all that by just not accepting AI/LLM generated contributions.
