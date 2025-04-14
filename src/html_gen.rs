@@ -5,7 +5,17 @@ use nailkov::{NailKov, interner::Interner};
 use rand::{Rng, RngCore, distr::Alphanumeric};
 use std::iter::repeat_with;
 
-use crate::INTERNER;
+use crate::{INTERNER, state::AppConfig};
+
+pub fn get_desired_size(config: &AppConfig, rng: &mut impl RngCore) -> usize {
+    let min_size = config.generator.min_size;
+    let max_size = config.generator.max_size;
+
+    match (min_size, max_size) {
+        (min, None) => min,
+        (min, Some(max)) => rng.random_range(min..=max),
+    }
+}
 
 fn text_generator<'a>(
     interner: &'a Interner,
@@ -19,7 +29,7 @@ fn text_generator<'a>(
         .take(size)
 }
 
-pub fn title(chain: &NailKov, size: usize, rng: &mut impl RngCore) -> (Bytes, Bytes) {
+pub fn title(chain: &NailKov, config: &AppConfig, rng: &mut impl RngCore) -> (Bytes, Bytes) {
     let interner = INTERNER.read();
 
     let title_text: String = text_generator(&interner, chain, 24, rng).collect();
@@ -41,7 +51,7 @@ pub fn title(chain: &NailKov, size: usize, rng: &mut impl RngCore) -> (Bytes, By
     let max_paras: u32 = rng.random_range(1..=3);
 
     for _ in 0..max_paras {
-        header.extend(paragraph(chain, size, rng));
+        header.extend(paragraph(chain, get_desired_size(config, rng), rng));
     }
 
     (title.freeze(), header.freeze())

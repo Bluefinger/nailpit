@@ -1,6 +1,7 @@
 #![warn(clippy::undocumented_unsafe_blocks)]
 
 mod body_stream;
+mod config;
 mod fv_parser;
 mod html_gen;
 mod markov;
@@ -18,6 +19,7 @@ use std::{
 
 use axum::http::HeaderValue;
 use color_eyre::Result;
+use config::{NailConfig, get_configuration};
 use futures_concurrency::future::{Race, TryJoin};
 use hyper::{HeaderMap, header::CONTENT_TYPE};
 use logforth::append;
@@ -26,9 +28,11 @@ use markov::MarkovGen;
 use nailkov::interner::Interner;
 use parking_lot::RwLock;
 use routes::{nail_app, nail_health};
+use scc::HashMap;
 use shutdown::{shutdown_task, wait_for_shutdown};
 use state::ServerState;
 use tokio::time::interval_at;
+use wyrand::RandomWyHashState;
 static INDEX: &str = include_str!("../templates/warning.html");
 
 const SOURCE_TIMEOUT: Duration = Duration::from_secs(60 * 2);
@@ -45,7 +49,7 @@ static GEN_HEADER: LazyLock<HeaderMap> = LazyLock::new(|| {
 static INTERNER: LazyLock<Arc<RwLock<Interner>>> = LazyLock::new(Default::default);
 
 static MARKOV: LazyLock<MarkovGen> =
-    LazyLock::new(|| MarkovGen::new(256, "./input/markov.txt").unwrap());
+    LazyLock::new(|| MarkovGen::new("./input/markov.txt").unwrap());
 
 #[fastrace::trace]
 async fn nailpit_cleanup(state: ServerState) {
@@ -106,10 +110,16 @@ async fn nailpit_axum(
     Ok(())
 }
 
-async fn nailpit_main() -> Result<()> {
+async fn nailpit_main(config: Arc<NailConfig>) -> Result<()> {
     let (shutdown_notifier, shutdown_signal) = tokio::sync::watch::channel(());
     let shutdown_notifier = Arc::new(shutdown_notifier);
-    let state = ServerState::default();
+    let state = ServerState::new(
+        Arc::new(HashMap::with_capacity_and_hasher(
+            128,
+            RandomWyHashState::new(),
+        )),
+        config,
+    );
 
     tokio::spawn(
         (
@@ -148,6 +158,10 @@ fn main() -> Result<()> {
 
     log::info!("Welcome to Nailpit!");
 
+    let config: NailConfig = get_configuration()?;
+
+    log::info!("Loaded config: {:?}", config);
+
     LazyLock::force(&MARKOV);
 
     let rt = tokio::runtime::Builder::new_multi_thread()
@@ -155,7 +169,7 @@ fn main() -> Result<()> {
         .enable_all()
         .build()?;
 
-    rt.block_on(nailpit_main())?;
+    rt.block_on(nailpit_main(Arc::new(config)))?;
 
     log::info!("Waiting for background tasks to complete...");
 

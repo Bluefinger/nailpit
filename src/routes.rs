@@ -13,7 +13,7 @@ use tower_http::{compression::CompressionLayer, normalize_path::NormalizePathLay
 use crate::{
     GEN_HEADER, INDEX, MARKOV,
     body_stream::BodyStream,
-    state::{ServerState, track_incoming_sources},
+    state::{AppConfig, ServerState, track_incoming_sources},
 };
 
 #[fastrace::trace]
@@ -22,12 +22,12 @@ async fn handler() -> Html<&'static str> {
 }
 
 #[fastrace::trace]
-async fn generated() -> impl IntoResponse {
-    BodyStream::from_stream(MARKOV.clone().into_stream()).headers(GEN_HEADER.clone())
+async fn generated(config: AppConfig) -> impl IntoResponse {
+    BodyStream::from_stream(MARKOV.clone().into_stream(config)).headers(GEN_HEADER.clone())
 }
 
 pub fn nail_app(state: ServerState) -> Router {
-    nail_route().layer(
+    nail_route(state.clone()).layer(
         ServiceBuilder::new()
             .layer(fastrace_axum::FastraceLayer)
             .layer(HandleErrorLayer::new(|err: BoxError| async move {
@@ -47,10 +47,11 @@ pub fn nail_app(state: ServerState) -> Router {
     )
 }
 
-pub fn nail_route() -> Router {
-    Router::new()
-        .route("/", get(handler))
-        .nest("/private", Router::new().fallback(get(generated)))
+pub fn nail_route(state: ServerState) -> Router {
+    Router::new().route("/", get(handler)).nest(
+        "/private",
+        Router::new().fallback(get(generated)).with_state(state),
+    )
 }
 
 pub fn nail_health() -> Router {
