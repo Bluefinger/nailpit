@@ -7,16 +7,20 @@ use std::iter::repeat_with;
 
 use crate::{INTERNER, state::AppConfig};
 
+/// Provides either the minimum configured size, or a randomised value between
+/// the minimum and maximum configured sizes if a maximum is available.
 pub fn get_desired_size(config: &AppConfig, rng: &mut impl RngCore) -> usize {
-    let min_size = config.generator.min_size;
-    let max_size = config.generator.max_size;
-
-    match (min_size, max_size) {
+    match (
+        config.generator.min_paragraph_size,
+        config.generator.max_paragraph_size,
+    ) {
         (min, None) => min,
         (min, Some(max)) => rng.random_range(min..=max),
     }
 }
 
+/// Generates text from the markov chain, using the tokens it outputs to pull
+/// interned text from the interner.
 fn text_generator<'a>(
     interner: &'a Interner,
     chain: &'a NailKov,

@@ -2,10 +2,11 @@ use std::{path::Path, sync::Arc};
 
 use bytes::{Bytes, BytesMut};
 use color_eyre::Result;
-use futures_lite::Stream;
+use fastrace::{Span, future::FutureExt};
 use nailkov::NailKov;
 use rand::{Rng, RngCore};
 use tokio::sync::mpsc;
+use tokio_stream::wrappers::ReceiverStream;
 
 use crate::{
     INTERNER,
@@ -49,12 +50,12 @@ impl MarkovGen {
             buffer.extend(header(chain, 24, rng));
 
             for _ in 0..max_paras {
-                buffer.extend(paragraph(chain, get_desired_size(&config, rng), rng));
+                buffer.extend(paragraph(chain, get_desired_size(config, rng), rng));
             }
         }
     }
 
-    #[fastrace::trace]
+    #[fastrace::trace(enter_on_poll = true)]
     async fn spawn_generator(self, tx: mpsc::Sender<Bytes>, config: AppConfig) {
         let mut bytes_written = 0_usize;
         let start_time = std::time::Instant::now();
@@ -94,8 +95,8 @@ impl MarkovGen {
             return;
         };
 
-        let time_limit_duration = std::time::Duration::from_secs(60);
-        let size_limit = 1024 * 1024;
+        let time_limit_duration = std::time::Duration::from_secs(config.generator.timeout);
+        let size_limit = 1024 * config.generator.payload_size;
         loop {
             if time_limit_duration.as_secs() != 0 && (start_time.elapsed() > time_limit_duration) {
                 log::info!(
@@ -135,11 +136,14 @@ impl MarkovGen {
     }
 
     #[fastrace::trace]
-    pub fn into_stream(self, config: AppConfig) -> impl Stream<Item = Bytes> {
+    pub fn into_stream(self, config: AppConfig) -> ReceiverStream<Bytes> {
         let (tx, rx) = mpsc::channel::<Bytes>(8);
 
-        tokio::spawn(self.spawn_generator(tx, config));
+        tokio::spawn(
+            self.spawn_generator(tx, config)
+                .in_span(Span::enter_with_local_parent("Markov Generator")),
+        );
 
-        tokio_stream::wrappers::ReceiverStream::new(rx)
+        ReceiverStream::new(rx)
     }
 }
