@@ -1,3 +1,4 @@
 /target
 /input
 .cargo/config.toml
+/configuration/pit.toml

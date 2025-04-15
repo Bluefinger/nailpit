@@ -1,6 +1,7 @@
 #![warn(clippy::undocumented_unsafe_blocks)]
 
 mod body_stream;
+mod config;
 mod fv_parser;
 mod html_gen;
 mod markov;
@@ -11,13 +12,20 @@ mod shutdown;
 mod state;
 
 use std::{
+    convert::Infallible,
     net::SocketAddr,
     sync::{Arc, LazyLock},
     time::{Duration, Instant},
 };
 
-use axum::http::HeaderValue;
+use axum::{
+    extract::Request,
+    http::HeaderValue,
+    response::Response,
+    serve::{IncomingStream, Listener},
+};
 use color_eyre::Result;
+use config::{NailConfig, get_configuration};
 use futures_concurrency::future::{Race, TryJoin};
 use hyper::{HeaderMap, header::CONTENT_TYPE};
 use logforth::append;
@@ -26,9 +34,12 @@ use markov::MarkovGen;
 use nailkov::interner::Interner;
 use parking_lot::RwLock;
 use routes::{nail_app, nail_health};
+use scc::HashMap;
 use shutdown::{shutdown_task, wait_for_shutdown};
 use state::ServerState;
 use tokio::time::interval_at;
+use tower::Service;
+use wyrand::RandomWyHashState;
 static INDEX: &str = include_str!("../templates/warning.html");
 
 const SOURCE_TIMEOUT: Duration = Duration::from_secs(60 * 2);
@@ -45,7 +56,7 @@ static GEN_HEADER: LazyLock<HeaderMap> = LazyLock::new(|| {
 static INTERNER: LazyLock<Arc<RwLock<Interner>>> = LazyLock::new(Default::default);
 
 static MARKOV: LazyLock<MarkovGen> =
-    LazyLock::new(|| MarkovGen::new(256, "./input/markov.txt").unwrap());
+    LazyLock::new(|| MarkovGen::new("./input/markov.txt").unwrap());
 
 #[fastrace::trace]
 async fn nailpit_cleanup(state: ServerState) {
@@ -65,10 +76,37 @@ async fn nailpit_cleanup(state: ServerState) {
     }
 }
 
-async fn nailpit_axum(
-    state: ServerState,
-    shutdown_notifier: Arc<tokio::sync::watch::Sender<()>>,
-) -> Result<()> {
+async fn spawn_axum_task<L, M, S, F>(listener: L, app: M, shutdown: F) -> Result<()>
+where
+    L: Listener,
+    L::Addr: core::fmt::Debug,
+    M: for<'a> Service<IncomingStream<'a, L>, Error = Infallible, Response = S> + Send + 'static,
+    for<'a> <M as Service<IncomingStream<'a, L>>>::Future: Send,
+    S: Service<Request, Response = Response, Error = Infallible> + Clone + Send + 'static,
+    S::Future: Send,
+    F: Future<Output = ()> + Send + 'static,
+{
+    tokio::spawn(
+        axum::serve(listener, app)
+            .with_graceful_shutdown(shutdown)
+            .into_future(),
+    )
+    .await??;
+
+    Ok(())
+}
+
+async fn nailpit_main(config: Arc<NailConfig>) -> Result<()> {
+    let (shutdown_notifier, shutdown_signal) = tokio::sync::watch::channel(());
+    let shutdown_notifier = Arc::new(shutdown_notifier);
+    let state = ServerState::new(
+        Arc::new(HashMap::with_capacity_and_hasher(
+            128,
+            RandomWyHashState::new(),
+        )),
+        config,
+    );
+
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
     let health_listener = tokio::net::TcpListener::bind("0.0.0.0:3001").await?;
 
@@ -77,39 +115,6 @@ async fn nailpit_axum(
         listener.local_addr()?,
         health_listener.local_addr()?
     );
-
-    let app = nail_app(state);
-
-    let generator_app = async {
-        tokio::spawn(
-            axum::serve(
-                listener,
-                app.into_make_service_with_connect_info::<SocketAddr>(),
-            )
-            .with_graceful_shutdown(wait_for_shutdown(shutdown_notifier.clone()))
-            .into_future(),
-        )
-        .await?
-    };
-
-    let health_app = async {
-        tokio::spawn(
-            axum::serve(health_listener, nail_health())
-                .with_graceful_shutdown(wait_for_shutdown(shutdown_notifier.clone()))
-                .into_future(),
-        )
-        .await?
-    };
-
-    (generator_app, health_app).try_join().await?;
-
-    Ok(())
-}
-
-async fn nailpit_main() -> Result<()> {
-    let (shutdown_notifier, shutdown_signal) = tokio::sync::watch::channel(());
-    let shutdown_notifier = Arc::new(shutdown_notifier);
-    let state = ServerState::default();
 
     tokio::spawn(
         (
@@ -120,10 +125,19 @@ async fn nailpit_main() -> Result<()> {
     );
 
     (
-        nailpit_axum(state, shutdown_notifier),
+        spawn_axum_task(
+            listener,
+            nail_app(state).into_make_service_with_connect_info::<SocketAddr>(),
+            wait_for_shutdown(shutdown_notifier.clone()),
+        ),
+        spawn_axum_task(
+            health_listener,
+            nail_health(),
+            wait_for_shutdown(shutdown_notifier),
+        ),
         shutdown_task(shutdown_signal),
     )
-        .race()
+        .try_join()
         .await?;
 
     Ok(())
@@ -148,6 +162,10 @@ fn main() -> Result<()> {
 
     log::info!("Welcome to Nailpit!");
 
+    let config: NailConfig = get_configuration()?;
+
+    log::info!("Loaded config: {:?}", config);
+
     LazyLock::force(&MARKOV);
 
     let rt = tokio::runtime::Builder::new_multi_thread()
@@ -155,7 +173,7 @@ fn main() -> Result<()> {
         .enable_all()
         .build()?;
 
-    rt.block_on(nailpit_main())?;
+    rt.block_on(nailpit_main(Arc::new(config)))?;
 
     log::info!("Waiting for background tasks to complete...");
 

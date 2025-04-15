@@ -77,6 +77,9 @@ tower-http = { version = "0.6.2", features = [
     "compression-zstd",
     "normalize-path",
 ] }
+serde.workspace = true
+serde-aux = { version = "4.5.0", default-features = false }
+config = { version = "0.15.11", default-features = false, features = ["toml"] }
 
 [profile.release]
 codegen-units = 1

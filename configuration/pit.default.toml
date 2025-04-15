@@ -1,0 +1,5 @@
+[generator]
+min_paragraph_size = 128
+max_paragraph_size = 256
+payload_size = 100
+timeout = 60

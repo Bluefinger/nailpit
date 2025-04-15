@@ -1,4 +1,5 @@
 use std::{
+    convert::Infallible,
     net::IpAddr,
     ops::{Deref, DerefMut},
     sync::Arc,
@@ -14,7 +15,7 @@ use hyper::StatusCode;
 use scc::HashMap;
 use wyrand::RandomWyHashState;
 
-use crate::peer::ProxiedPeer;
+use crate::{config::NailConfig, peer::ProxiedPeer};
 
 #[derive(Debug, Clone)]
 pub struct SourceState {
@@ -49,24 +50,47 @@ impl DerefMut for SourceMap {
 }
 
 #[derive(Debug, Clone)]
+pub struct AppConfig(Arc<NailConfig>);
+
+impl From<Arc<NailConfig>> for AppConfig {
+    #[inline]
+    fn from(value: Arc<NailConfig>) -> Self {
+        Self(value)
+    }
+}
+
+impl Deref for AppConfig {
+    type Target = NailConfig;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.as_ref()
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct ServerState {
     pub sources: SourceMap,
+    pub config: AppConfig,
 }
 
 impl ServerState {
-    pub fn new(sources: impl Into<SourceMap>) -> Self {
+    pub fn new(sources: impl Into<SourceMap>, config: impl Into<AppConfig>) -> Self {
         Self {
             sources: sources.into(),
+            config: config.into(),
         }
     }
 }
 
 impl Default for ServerState {
     fn default() -> Self {
-        Self::new(Arc::new(HashMap::with_capacity_and_hasher(
-            128,
-            RandomWyHashState::new(),
-        )))
+        Self::new(
+            Arc::new(HashMap::with_capacity_and_hasher(
+                128,
+                RandomWyHashState::new(),
+            )),
+            Arc::new(Default::default()),
+        )
     }
 }
 
@@ -77,12 +101,19 @@ impl FromRef<ServerState> for SourceMap {
     }
 }
 
+impl FromRef<ServerState> for AppConfig {
+    #[inline]
+    fn from_ref(input: &ServerState) -> Self {
+        input.config.clone()
+    }
+}
+
 impl<S> FromRequestParts<S> for SourceMap
 where
     SourceMap: FromRef<S>,
     S: Send + Sync,
 {
-    type Rejection = (StatusCode, &'static str);
+    type Rejection = Infallible;
 
     #[fastrace::trace]
     async fn from_request_parts(
@@ -90,6 +121,21 @@ where
         state: &S,
     ) -> Result<Self, Self::Rejection> {
         Ok(SourceMap::from_ref(state))
+    }
+}
+
+impl<S> FromRequestParts<S> for AppConfig
+where
+    AppConfig: FromRef<S>,
+    S: Send + Sync,
+{
+    type Rejection = Infallible;
+
+    async fn from_request_parts(
+        _parts: &mut axum::http::request::Parts,
+        state: &S,
+    ) -> Result<Self, Self::Rejection> {
+        Ok(AppConfig::from_ref(state))
     }
 }
 

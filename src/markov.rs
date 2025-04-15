@@ -2,26 +2,27 @@ use std::{path::Path, sync::Arc};
 
 use bytes::{Bytes, BytesMut};
 use color_eyre::Result;
-use futures_lite::Stream;
+use fastrace::{Span, future::FutureExt};
 use nailkov::NailKov;
 use rand::{Rng, RngCore};
 use tokio::sync::mpsc;
+use tokio_stream::wrappers::ReceiverStream;
 
 use crate::{
     INTERNER,
-    html_gen::{footer, header, paragraph, title},
+    html_gen::{footer, get_desired_size, header, paragraph, title},
     rng::FastRng,
+    state::AppConfig,
 };
 
 #[derive(Debug, Clone)]
 pub struct MarkovGen {
     chain: Arc<NailKov>,
-    size: usize,
 }
 
 impl MarkovGen {
     #[fastrace::trace]
-    pub fn new(size: usize, input: impl AsRef<Path>) -> Result<Self> {
+    pub fn new(input: impl AsRef<Path>) -> Result<Self> {
         let file = std::fs::read_to_string(input.as_ref())?;
 
         let mut interner_write_lock = INTERNER.write();
@@ -30,10 +31,10 @@ impl MarkovGen {
 
         drop(interner_write_lock);
 
-        Ok(Self { chain, size })
+        Ok(Self { chain })
     }
 
-    fn generate(chain: &NailKov, desired_size: usize, rng: &mut impl RngCore) -> Bytes {
+    fn generate(chain: &NailKov, config: &AppConfig, rng: &mut impl RngCore) -> Bytes {
         let mut buffer = BytesMut::with_capacity(8192);
 
         loop {
@@ -49,19 +50,18 @@ impl MarkovGen {
             buffer.extend(header(chain, 24, rng));
 
             for _ in 0..max_paras {
-                buffer.extend(paragraph(chain, desired_size, rng));
+                buffer.extend(paragraph(chain, get_desired_size(config, rng), rng));
             }
         }
     }
 
-    #[fastrace::trace]
-    async fn spawn_generator(self, tx: mpsc::Sender<Bytes>) {
+    #[fastrace::trace(enter_on_poll = true)]
+    async fn spawn_generator(self, tx: mpsc::Sender<Bytes>, config: AppConfig) {
         let mut bytes_written = 0_usize;
         let start_time = std::time::Instant::now();
-        let desired_size = self.size.max(128);
         let mut rng = FastRng::default();
 
-        let (title, content) = title(self.chain.as_ref(), desired_size, &mut rng);
+        let (title, content) = title(self.chain.as_ref(), &config, &mut rng);
 
         // For the first payload we want to make it look like an HTML page.
         // We want to ensure it has a unique title that matches the article header, so to
@@ -95,8 +95,8 @@ impl MarkovGen {
             return;
         };
 
-        let time_limit_duration = std::time::Duration::from_secs(60);
-        let size_limit = 1024 * 1024;
+        let time_limit_duration = std::time::Duration::from_secs(config.generator.timeout);
+        let size_limit = 1024 * config.generator.payload_size;
         loop {
             if time_limit_duration.as_secs() != 0 && (start_time.elapsed() > time_limit_duration) {
                 log::info!(
@@ -106,7 +106,7 @@ impl MarkovGen {
                 break;
             }
 
-            let content = MarkovGen::generate(self.chain.as_ref(), desired_size, &mut rng);
+            let content = MarkovGen::generate(self.chain.as_ref(), &config, &mut rng);
 
             let content_size = content.len();
 
@@ -136,11 +136,14 @@ impl MarkovGen {
     }
 
     #[fastrace::trace]
-    pub fn into_stream(self) -> impl Stream<Item = Bytes> {
+    pub fn into_stream(self, config: AppConfig) -> ReceiverStream<Bytes> {
         let (tx, rx) = mpsc::channel::<Bytes>(8);
 
-        tokio::spawn(self.spawn_generator(tx));
+        tokio::spawn(
+            self.spawn_generator(tx, config)
+                .in_span(Span::enter_with_local_parent("Markov Generator")),
+        );
 
-        tokio_stream::wrappers::ReceiverStream::new(rx)
+        ReceiverStream::new(rx)
     }
 }

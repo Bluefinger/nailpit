@@ -5,8 +5,22 @@ use nailkov::{NailKov, interner::Interner};
 use rand::{Rng, RngCore, distr::Alphanumeric};
 use std::iter::repeat_with;
 
-use crate::INTERNER;
+use crate::{INTERNER, state::AppConfig};
 
+/// Provides either the minimum configured size, or a randomised value between
+/// the minimum and maximum configured sizes if a maximum is available.
+pub fn get_desired_size(config: &AppConfig, rng: &mut impl RngCore) -> usize {
+    match (
+        config.generator.min_paragraph_size,
+        config.generator.max_paragraph_size,
+    ) {
+        (min, None) => min,
+        (min, Some(max)) => rng.random_range(min..=max),
+    }
+}
+
+/// Generates text from the markov chain, using the tokens it outputs to pull
+/// interned text from the interner.
 fn text_generator<'a>(
     interner: &'a Interner,
     chain: &'a NailKov,
@@ -19,7 +33,7 @@ fn text_generator<'a>(
         .take(size)
 }
 
-pub fn title(chain: &NailKov, size: usize, rng: &mut impl RngCore) -> (Bytes, Bytes) {
+pub fn title(chain: &NailKov, config: &AppConfig, rng: &mut impl RngCore) -> (Bytes, Bytes) {
     let interner = INTERNER.read();
 
     let title_text: String = text_generator(&interner, chain, 24, rng).collect();
@@ -41,7 +55,7 @@ pub fn title(chain: &NailKov, size: usize, rng: &mut impl RngCore) -> (Bytes, By
     let max_paras: u32 = rng.random_range(1..=3);
 
     for _ in 0..max_paras {
-        header.extend(paragraph(chain, size, rng));
+        header.extend(paragraph(chain, get_desired_size(config, rng), rng));
     }
 
     (title.freeze(), header.freeze())
