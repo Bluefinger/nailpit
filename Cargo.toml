@@ -80,6 +80,7 @@ tower-http = { version = "0.6.2", features = [
 serde.workspace = true
 serde-aux = { version = "4.5.0", default-features = false }
 config = { version = "0.15.11", default-features = false, features = ["toml"] }
+glob = "0.3.2"
 
 [profile.release]
 codegen-units = 1
