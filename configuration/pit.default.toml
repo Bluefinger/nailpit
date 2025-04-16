@@ -1,3 +1,6 @@
+pit_routes = ["/private"]
+socket_addr = "0.0.0.0:3000"
+
 [generator]
 input_files = "input/*.txt"
 min_paragraph_size = 128
