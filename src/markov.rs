@@ -1,5 +1,6 @@
 use std::{path::Path, sync::Arc};
 
+use axum::extract::NestedPath;
 use bytes::{Bytes, BytesMut};
 use color_eyre::Result;
 use fastrace::{Span, future::FutureExt};
@@ -56,7 +57,7 @@ impl MarkovGen {
     }
 
     #[fastrace::trace(enter_on_poll = true)]
-    async fn spawn_generator(self, tx: mpsc::Sender<Bytes>, config: AppConfig) {
+    async fn spawn_generator(self, path: NestedPath, config: AppConfig, tx: mpsc::Sender<Bytes>) {
         let mut bytes_written = 0_usize;
         let start_time = std::time::Instant::now();
         let mut rng = FastRng::default();
@@ -130,17 +131,17 @@ impl MarkovGen {
             }
         }
 
-        let final_str = footer(&mut rng);
+        let final_str = footer(path.as_str(), &mut rng);
 
         tx.send(final_str).await.ok();
     }
 
     #[fastrace::trace]
-    pub fn into_stream(self, config: AppConfig) -> ReceiverStream<Bytes> {
+    pub fn into_stream(self, path: NestedPath, config: AppConfig) -> ReceiverStream<Bytes> {
         let (tx, rx) = mpsc::channel::<Bytes>(8);
 
         tokio::spawn(
-            self.spawn_generator(tx, config)
+            self.spawn_generator(path, config, tx)
                 .in_span(Span::enter_with_local_parent("Markov Generator")),
         );
 

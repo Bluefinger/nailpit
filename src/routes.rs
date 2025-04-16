@@ -3,6 +3,7 @@ use std::time::Duration;
 use axum::{
     BoxError, Router,
     error_handling::HandleErrorLayer,
+    extract::NestedPath,
     response::{Html, IntoResponse},
     routing::get,
 };
@@ -23,8 +24,9 @@ async fn handler() -> Html<&'static str> {
 }
 
 #[fastrace::trace]
-async fn generated(config: AppConfig, input: MarkovGen) -> impl IntoResponse {
-    BodyStream::from_stream(input.into_stream(config)).headers(GEN_HEADER.clone())
+#[axum::debug_handler(state = ServerState)]
+async fn generated(config: AppConfig, input: MarkovGen, path: NestedPath) -> impl IntoResponse {
+    BodyStream::from_stream(input.into_stream(path, config)).headers(GEN_HEADER.clone())
 }
 
 pub fn nail_app(state: ServerState) -> Router {

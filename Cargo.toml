@@ -40,7 +40,7 @@ tracing = ["fastrace/enable"]
 
 [dependencies]
 nailkov = { path = "nailkov" }
-axum = { version = "0.8.1", default-features = false, features = ["tokio", "http1", "http2"] }
+axum = { version = "0.8.1", default-features = false, features = ["tokio", "http1", "http2", "macros"] }
 axum-core = { version = "0.5.0", default-features = false }
 hyper = { version = "1.6.0", default-features = false, features = ["server"] }
 hyper-util = { version = "0.1.10", default-features = false, features = ["server", "server-auto"] }
