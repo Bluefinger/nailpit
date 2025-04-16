@@ -38,6 +38,8 @@ pub fn title(chain: &NailKov, config: &AppConfig, rng: &mut impl RngCore) -> (By
 
     let title_text: String = text_generator(&interner, chain, 24, rng).collect();
 
+    drop(interner);
+
     let mut title = BytesMut::new();
 
     title.extend(b"<title>");
