@@ -14,36 +14,71 @@ use axum::{
 use hyper::StatusCode;
 use scc::HashMap;
 use wyrand::RandomWyHashState;
+use rand::seq::IndexedRandom;
 
-use crate::{config::NailConfig, peer::ProxiedPeer};
+use crate::{config::NailConfig, markov::MarkovGen, peer::ProxiedPeer, rng::FastRng};
 
+/// Smart pointer for all available Markov chains.
 #[derive(Debug, Clone)]
-pub struct SourceState {
-    visited: usize,
-    pub last_seen: Instant,
+pub struct NailInputs(Arc<[MarkovGen]>);
+
+impl NailInputs {
+    /// Pulls a random markov chain from the available list. Returns a cloned
+    /// pointer to the selected chain.
+    pub fn get_random_input(&self) -> MarkovGen {
+        assert!(!self.0.is_empty());
+
+        if self.0.len() == 1 {
+            self.0[0].clone()
+        } else {
+            let mut rng = FastRng::default();
+
+            self.0.choose(&mut rng).unwrap().clone()
+        }
+    }
 }
 
-type ShardedSources = Arc<HashMap<IpAddr, SourceState, RandomWyHashState>>;
-
-#[derive(Debug, Clone)]
-pub struct SourceMap(ShardedSources);
-
-impl From<ShardedSources> for SourceMap {
-    #[inline]
-    fn from(value: ShardedSources) -> Self {
+impl From<Arc<[MarkovGen]>> for NailInputs {
+    fn from(value: Arc<[MarkovGen]>) -> Self {
         Self(value)
     }
 }
 
-impl Deref for SourceMap {
-    type Target = ShardedSources;
+impl Deref for NailInputs {
+    type Target = [MarkovGen];
+
+    fn deref(&self) -> &Self::Target {
+        self.0.as_ref()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct PeerState {
+    visited: usize,
+    pub last_seen: Instant,
+}
+
+type ShardedPeers = Arc<HashMap<IpAddr, PeerState, RandomWyHashState>>;
+
+#[derive(Debug, Clone)]
+pub struct PeerMap(ShardedPeers);
+
+impl From<ShardedPeers> for PeerMap {
+    #[inline]
+    fn from(value: ShardedPeers) -> Self {
+        Self(value)
+    }
+}
+
+impl Deref for PeerMap {
+    type Target = ShardedPeers;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl DerefMut for SourceMap {
+impl DerefMut for PeerMap {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
@@ -69,32 +104,26 @@ impl Deref for AppConfig {
 
 #[derive(Debug, Clone)]
 pub struct ServerState {
-    pub sources: SourceMap,
+    pub sources: PeerMap,
     pub config: AppConfig,
+    pub inputs: NailInputs,
 }
 
 impl ServerState {
-    pub fn new(sources: impl Into<SourceMap>, config: impl Into<AppConfig>) -> Self {
+    pub fn new(
+        sources: impl Into<PeerMap>,
+        config: impl Into<AppConfig>,
+        inputs: impl Into<NailInputs>,
+    ) -> Self {
         Self {
             sources: sources.into(),
             config: config.into(),
+            inputs: inputs.into(),
         }
     }
 }
 
-impl Default for ServerState {
-    fn default() -> Self {
-        Self::new(
-            Arc::new(HashMap::with_capacity_and_hasher(
-                128,
-                RandomWyHashState::new(),
-            )),
-            Arc::new(Default::default()),
-        )
-    }
-}
-
-impl FromRef<ServerState> for SourceMap {
+impl FromRef<ServerState> for PeerMap {
     #[inline]
     fn from_ref(input: &ServerState) -> Self {
         input.sources.clone()
@@ -108,9 +137,16 @@ impl FromRef<ServerState> for AppConfig {
     }
 }
 
-impl<S> FromRequestParts<S> for SourceMap
+impl FromRef<ServerState> for NailInputs {
+    #[inline]
+    fn from_ref(input: &ServerState) -> Self {
+        input.inputs.clone()
+    }
+}
+
+impl<S> FromRequestParts<S> for PeerMap
 where
-    SourceMap: FromRef<S>,
+    PeerMap: FromRef<S>,
     S: Send + Sync,
 {
     type Rejection = Infallible;
@@ -120,7 +156,7 @@ where
         _parts: &mut axum::http::request::Parts,
         state: &S,
     ) -> Result<Self, Self::Rejection> {
-        Ok(SourceMap::from_ref(state))
+        Ok(PeerMap::from_ref(state))
     }
 }
 
@@ -131,6 +167,7 @@ where
 {
     type Rejection = Infallible;
 
+    #[fastrace::trace]
     async fn from_request_parts(
         _parts: &mut axum::http::request::Parts,
         state: &S,
@@ -139,9 +176,27 @@ where
     }
 }
 
+impl<S> FromRequestParts<S> for MarkovGen
+where
+    NailInputs: FromRef<S>,
+    S: Send + Sync,
+{
+    type Rejection = Infallible;
+
+    #[fastrace::trace]
+    async fn from_request_parts(
+        _parts: &mut axum::http::request::Parts,
+        state: &S,
+    ) -> Result<Self, Self::Rejection> {
+        let markov = NailInputs::from_ref(state);
+
+        Ok(markov.get_random_input())
+    }
+}
+
 #[fastrace::trace]
 pub async fn track_incoming_sources(
-    sources: SourceMap,
+    sources: PeerMap,
     proxied: ProxiedPeer,
     request: Request,
     next: Next,
@@ -155,7 +210,7 @@ pub async fn track_incoming_sources(
             source.visited += 1;
             source.last_seen = Instant::now()
         })
-        .or_insert_with(|| SourceState {
+        .or_insert_with(|| PeerState {
             visited: 1,
             last_seen: Instant::now(),
         });

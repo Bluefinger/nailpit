@@ -1,4 +1,5 @@
 [generator]
+input_files = "input/*.txt"
 min_paragraph_size = 128
 max_paragraph_size = 256
 payload_size = 100

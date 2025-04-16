@@ -4,6 +4,7 @@ mod body_stream;
 mod config;
 mod fv_parser;
 mod html_gen;
+mod inputs;
 mod markov;
 mod peer;
 mod rng;
@@ -28,6 +29,7 @@ use color_eyre::Result;
 use config::{NailConfig, get_configuration};
 use futures_concurrency::future::{Race, TryJoin};
 use hyper::{HeaderMap, header::CONTENT_TYPE};
+use inputs::get_input_files;
 use logforth::append;
 use logforth::filter::EnvFilter;
 use markov::MarkovGen;
@@ -54,9 +56,6 @@ static GEN_HEADER: LazyLock<HeaderMap> = LazyLock::new(|| {
 });
 
 static INTERNER: LazyLock<Arc<RwLock<Interner>>> = LazyLock::new(Default::default);
-
-static MARKOV: LazyLock<MarkovGen> =
-    LazyLock::new(|| MarkovGen::new("./input/markov.txt").unwrap());
 
 #[fastrace::trace]
 async fn nailpit_cleanup(state: ServerState) {
@@ -96,7 +95,7 @@ where
     Ok(())
 }
 
-async fn nailpit_main(config: Arc<NailConfig>) -> Result<()> {
+async fn nailpit_main(config: Arc<NailConfig>, inputs: Arc<[MarkovGen]>) -> Result<()> {
     let (shutdown_notifier, shutdown_signal) = tokio::sync::watch::channel(());
     let shutdown_notifier = Arc::new(shutdown_notifier);
     let state = ServerState::new(
@@ -105,6 +104,7 @@ async fn nailpit_main(config: Arc<NailConfig>) -> Result<()> {
             RandomWyHashState::new(),
         )),
         config,
+        inputs,
     );
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
@@ -166,14 +166,14 @@ fn main() -> Result<()> {
 
     log::info!("Loaded config: {:?}", config);
 
-    LazyLock::force(&MARKOV);
+    let inputs = get_input_files(&config)?;
 
     let rt = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(std::thread::available_parallelism()?.get().min(4))
         .enable_all()
         .build()?;
 
-    rt.block_on(nailpit_main(Arc::new(config)))?;
+    rt.block_on(nailpit_main(Arc::new(config), inputs))?;
 
     log::info!("Waiting for background tasks to complete...");
 
