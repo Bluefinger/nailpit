@@ -5,6 +5,8 @@ use serde_aux::field_attributes::{
 
 #[derive(Debug, serde::Deserialize)]
 pub struct NailConfig {
+    pub pit_routes: Vec<String>,
+    pub socket_addr: String,
     pub generator: GeneratorConfig,
 }
 

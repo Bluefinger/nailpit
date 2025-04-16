@@ -13,18 +13,12 @@ mod shutdown;
 mod state;
 
 use std::{
-    convert::Infallible,
     net::SocketAddr,
     sync::{Arc, LazyLock},
     time::{Duration, Instant},
 };
 
-use axum::{
-    extract::Request,
-    http::HeaderValue,
-    response::Response,
-    serve::{IncomingStream, Listener},
-};
+use axum::http::HeaderValue;
 use color_eyre::Result;
 use config::{NailConfig, get_configuration};
 use futures_concurrency::future::{Race, TryJoin};
@@ -35,12 +29,11 @@ use logforth::filter::EnvFilter;
 use markov::MarkovGen;
 use nailkov::interner::Interner;
 use parking_lot::RwLock;
-use routes::{nail_app, nail_health};
+use routes::nail_app;
 use scc::HashMap;
 use shutdown::{shutdown_task, wait_for_shutdown};
 use state::ServerState;
 use tokio::time::interval_at;
-use tower::Service;
 use wyrand::RandomWyHashState;
 static INDEX: &str = include_str!("../templates/warning.html");
 
@@ -75,20 +68,24 @@ async fn nailpit_cleanup(state: ServerState) {
     }
 }
 
-async fn spawn_axum_task<L, M, S, F>(listener: L, app: M, shutdown: F) -> Result<()>
+async fn spawn_axum_server<F>(
+    state: ServerState,
+    shutdown: F,
+) -> Result<()>
 where
-    L: Listener,
-    L::Addr: core::fmt::Debug,
-    M: for<'a> Service<IncomingStream<'a, L>, Error = Infallible, Response = S> + Send + 'static,
-    for<'a> <M as Service<IncomingStream<'a, L>>>::Future: Send,
-    S: Service<Request, Response = Response, Error = Infallible> + Clone + Send + 'static,
-    S::Future: Send,
     F: Future<Output = ()> + Send + 'static,
 {
+    let listener = tokio::net::TcpListener::bind(&state.config.socket_addr).await?;
+
+    log::info!("listening on http://{}", listener.local_addr()?,);
+
     tokio::spawn(
-        axum::serve(listener, app)
-            .with_graceful_shutdown(shutdown)
-            .into_future(),
+        axum::serve(
+            listener,
+            nail_app(state).into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .with_graceful_shutdown(shutdown)
+        .into_future(),
     )
     .await??;
 
@@ -107,15 +104,6 @@ async fn nailpit_main(config: Arc<NailConfig>, inputs: Arc<[MarkovGen]>) -> Resu
         inputs,
     );
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
-    let health_listener = tokio::net::TcpListener::bind("0.0.0.0:3001").await?;
-
-    log::info!(
-        "listening on http://{} & http://{}/health",
-        listener.local_addr()?,
-        health_listener.local_addr()?
-    );
-
     tokio::spawn(
         (
             wait_for_shutdown(shutdown_notifier.clone()),
@@ -125,15 +113,9 @@ async fn nailpit_main(config: Arc<NailConfig>, inputs: Arc<[MarkovGen]>) -> Resu
     );
 
     (
-        spawn_axum_task(
-            listener,
-            nail_app(state).into_make_service_with_connect_info::<SocketAddr>(),
+        spawn_axum_server(
+            state,
             wait_for_shutdown(shutdown_notifier.clone()),
-        ),
-        spawn_axum_task(
-            health_listener,
-            nail_health(),
-            wait_for_shutdown(shutdown_notifier),
         ),
         shutdown_task(shutdown_signal),
     )
