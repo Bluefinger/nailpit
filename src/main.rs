@@ -115,7 +115,7 @@ async fn nailpit_main(config: Arc<NailConfig>, inputs: Arc<[MarkovGen]>) -> Resu
     (
         spawn_axum_server(
             state,
-            wait_for_shutdown(shutdown_notifier.clone()),
+            wait_for_shutdown(shutdown_notifier),
         ),
         shutdown_task(shutdown_signal),
     )
