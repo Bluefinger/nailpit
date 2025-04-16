@@ -24,7 +24,6 @@ async fn handler() -> Html<&'static str> {
 }
 
 #[fastrace::trace]
-#[axum::debug_handler(state = ServerState)]
 async fn generated(config: AppConfig, input: MarkovGen, path: NestedPath) -> impl IntoResponse {
     BodyStream::from_stream(input.into_stream(path, config)).headers(GEN_HEADER.clone())
 }
