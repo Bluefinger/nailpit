@@ -1,20 +1,25 @@
-use std::{path::Path, sync::Arc};
+use std::{
+    path::Path,
+    sync::{Arc, LazyLock},
+};
 
 use axum::extract::NestedPath;
 use bytes::{Bytes, BytesMut};
 use color_eyre::Result;
 use fastrace::{Span, future::FutureExt};
-use nailkov::NailKov;
+use nailconfig::NailConfig;
+use nailkov::{NailKov, interner::Interner};
+use nailrng::FastRng;
+use parking_lot::RwLock;
 use rand::{Rng, RngCore};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 
-use crate::{
-    INTERNER,
-    html_gen::{footer, get_desired_size, header, paragraph, title},
-    rng::FastRng,
-    state::AppConfig,
-};
+use crate::html_gen::{footer, get_desired_size, header, paragraph, title};
+
+mod html_gen;
+
+static INTERNER: LazyLock<Arc<RwLock<Interner>>> = LazyLock::new(Default::default);
 
 #[derive(Debug, Clone)]
 pub struct MarkovGen {
@@ -35,7 +40,7 @@ impl MarkovGen {
         Ok(Self { chain })
     }
 
-    fn generate(chain: &NailKov, config: &AppConfig, rng: &mut impl RngCore) -> Bytes {
+    fn generate(chain: &NailKov, config: &NailConfig, rng: &mut impl RngCore) -> Bytes {
         let mut buffer = BytesMut::with_capacity(8192);
 
         loop {
@@ -57,7 +62,12 @@ impl MarkovGen {
     }
 
     #[fastrace::trace(enter_on_poll = true)]
-    async fn spawn_generator(self, path: NestedPath, config: AppConfig, tx: mpsc::Sender<Bytes>) {
+    async fn spawn_generator(
+        self,
+        path: NestedPath,
+        config: Arc<NailConfig>,
+        tx: mpsc::Sender<Bytes>,
+    ) {
         let mut bytes_written = 0_usize;
         let start_time = std::time::Instant::now();
         let mut rng = FastRng::default();
@@ -137,7 +147,7 @@ impl MarkovGen {
     }
 
     #[fastrace::trace]
-    pub fn into_stream(self, path: NestedPath, config: AppConfig) -> ReceiverStream<Bytes> {
+    pub fn into_stream(self, path: NestedPath, config: Arc<NailConfig>) -> ReceiverStream<Bytes> {
         let (tx, rx) = mpsc::channel::<Bytes>(8);
 
         tokio::spawn(

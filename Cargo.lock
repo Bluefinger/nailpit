@@ -801,6 +801,42 @@ dependencies = [
 ]
 
 [[package]]
+name = "nailconfig"
+version = "0.1.0"
+dependencies = [
+ "color-eyre",
+ "config",
+ "serde",
+ "serde-aux",
+]
+
+[[package]]
+name = "nailfv"
+version = "0.1.0"
+dependencies = [
+ "color-eyre",
+ "winnow",
+]
+
+[[package]]
+name = "nailgen"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "bytes",
+ "color-eyre",
+ "fastrace",
+ "log",
+ "nailconfig",
+ "nailkov",
+ "nailrng",
+ "parking_lot",
+ "rand",
+ "tokio",
+ "tokio-stream",
+]
+
+[[package]]
 name = "nailkov"
 version = "0.1.0"
 dependencies = [
@@ -822,31 +858,48 @@ dependencies = [
  "axum-core",
  "bytes",
  "color-eyre",
- "config",
  "fastrace",
  "fastrace-axum",
  "futures-concurrency",
- "futures-lite",
- "getrandom",
  "glob",
  "hyper",
- "hyper-util",
  "log",
  "logforth",
+ "nailconfig",
+ "nailfv",
+ "nailgen",
  "nailkov",
+ "nailrng",
+ "nailstream",
  "parking_lot",
  "rand",
  "rand_core",
  "scc",
  "serde",
- "serde-aux",
  "tokio",
  "tokio-stream",
  "tower",
  "tower-http",
  "tower-service",
- "winnow",
  "wyrand",
+]
+
+[[package]]
+name = "nailrng"
+version = "0.1.0"
+dependencies = [
+ "getrandom",
+ "rand_core",
+ "wyrand",
+]
+
+[[package]]
+name = "nailstream"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "futures-lite",
+ "hyper",
 ]
 
 [[package]]

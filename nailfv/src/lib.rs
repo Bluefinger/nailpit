@@ -1,12 +1,14 @@
 use std::net::IpAddr;
 
 use winnow::{
-    ModalResult, Parser,
+    ModalResult,
     ascii::Caseless,
     combinator::alt,
     stream::Stream,
     token::{literal, take_till, take_until},
 };
+
+pub use winnow::Parser;
 
 /// Check if a header value string begins with `for=`, in order to
 /// determine whether it is a valid value for a Forwarded header, and

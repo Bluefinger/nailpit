@@ -1,0 +1,22 @@
+[package]
+name = "nailgen"
+authors.workspace = true
+edition.workspace = true
+repository.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+nailkov = { path = "../nailkov" }
+nailconfig = { path = "../nailconfig" }
+nailrng = { path = "../nailrng" }
+parking_lot.workspace = true
+color-eyre.workspace = true
+fastrace.workspace = true
+rand.workspace = true
+bytes.workspace = true
+log.workspace = true
+tokio.workspace = true
+tokio-stream.workspace = true
+axum.workspace = true

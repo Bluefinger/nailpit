@@ -1,0 +1,13 @@
+[package]
+name = "nailstream"
+authors.workspace = true
+edition.workspace = true
+repository.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+axum.workspace = true
+hyper.workspace = true
+futures-lite = "2.6.0"

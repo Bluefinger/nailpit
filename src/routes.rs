@@ -1,21 +1,17 @@
 use std::time::Duration;
 
 use axum::{
-    BoxError, Router,
-    error_handling::HandleErrorLayer,
-    extract::NestedPath,
-    response::{Html, IntoResponse},
+    BoxError, Router, error_handling::HandleErrorLayer, extract::NestedPath, response::Html,
     routing::get,
 };
 use hyper::StatusCode;
+use nailstream::NailStream;
 use tower::{ServiceBuilder, buffer::BufferLayer, limit::RateLimitLayer};
 use tower_http::{compression::CompressionLayer, normalize_path::NormalizePathLayer};
 
 use crate::{
     GEN_HEADER, INDEX,
-    body_stream::BodyStream,
-    markov::MarkovGen,
-    state::{AppConfig, ServerState, track_incoming_sources},
+    state::{AppConfig, NailInputs, ServerState, track_incoming_sources},
 };
 
 #[fastrace::trace]
@@ -24,8 +20,13 @@ async fn handler() -> Html<&'static str> {
 }
 
 #[fastrace::trace]
-async fn generated(config: AppConfig, input: MarkovGen, path: NestedPath) -> impl IntoResponse {
-    BodyStream::from_stream(input.into_stream(path, config)).headers(GEN_HEADER.clone())
+async fn generated(config: AppConfig, input: NailInputs, path: NestedPath) -> NailStream {
+    NailStream::from_stream(
+        input
+            .get_random_input()
+            .into_stream(path, config.clone_inner()),
+    )
+    .headers(GEN_HEADER.clone())
 }
 
 pub fn nail_app(state: ServerState) -> Router {

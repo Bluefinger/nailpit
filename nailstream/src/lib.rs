@@ -11,12 +11,12 @@ use axum::{
 use futures_lite::{Stream, StreamExt, stream::Boxed};
 use hyper::body::{Bytes, Frame};
 
-pub struct BodyStream {
+pub struct NailStream {
     stream: Boxed<Result<Frame<Bytes>, axum::Error>>,
     headers: Option<HeaderMap>,
 }
 
-impl BodyStream {
+impl NailStream {
     pub fn from_stream(stream: impl Stream<Item = Bytes> + Send + 'static) -> Self {
         Self {
             stream: stream.map(Frame::data).map(Ok).boxed(),
@@ -25,7 +25,7 @@ impl BodyStream {
     }
 }
 
-impl BodyStream {
+impl NailStream {
     /// Set headers for the body.
     pub fn headers(mut self, headers: HeaderMap) -> Self {
         self.headers = Some(headers);
@@ -33,7 +33,7 @@ impl BodyStream {
     }
 }
 
-impl hyper::body::Body for BodyStream {
+impl hyper::body::Body for NailStream {
     type Data = Bytes;
     type Error = axum::Error;
 
@@ -45,7 +45,7 @@ impl hyper::body::Body for BodyStream {
     }
 }
 
-impl IntoResponse for BodyStream {
+impl IntoResponse for NailStream {
     fn into_response(mut self) -> Response<Body> {
         let headers = self.headers.take().unwrap_or_default();
         let mut response: Response<Body> = Response::new(Body::new(self));

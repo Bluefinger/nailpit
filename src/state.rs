@@ -12,11 +12,14 @@ use axum::{
     response::Response,
 };
 use hyper::StatusCode;
+use nailconfig::NailConfig;
+use nailgen::MarkovGen;
+use nailrng::FastRng;
+use rand::seq::IndexedRandom;
 use scc::HashMap;
 use wyrand::RandomWyHashState;
-use rand::seq::IndexedRandom;
 
-use crate::{config::NailConfig, markov::MarkovGen, peer::ProxiedPeer, rng::FastRng};
+use crate::peer::ProxiedPeer;
 
 /// Smart pointer for all available Markov chains.
 #[derive(Debug, Clone)]
@@ -86,6 +89,12 @@ impl DerefMut for PeerMap {
 
 #[derive(Debug, Clone)]
 pub struct AppConfig(Arc<NailConfig>);
+
+impl AppConfig {
+    pub fn clone_inner(&self) -> Arc<NailConfig> {
+        self.0.clone()
+    }
+}
 
 impl From<Arc<NailConfig>> for AppConfig {
     #[inline]
@@ -176,7 +185,7 @@ where
     }
 }
 
-impl<S> FromRequestParts<S> for MarkovGen
+impl<S> FromRequestParts<S> for NailInputs
 where
     NailInputs: FromRef<S>,
     S: Send + Sync,
@@ -188,9 +197,7 @@ where
         _parts: &mut axum::http::request::Parts,
         state: &S,
     ) -> Result<Self, Self::Rejection> {
-        let markov = NailInputs::from_ref(state);
-
-        Ok(markov.get_random_input())
+        Ok(NailInputs::from_ref(state))
     }
 }
 

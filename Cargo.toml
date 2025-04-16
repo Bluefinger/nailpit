@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["nailkov"]
+members = ["nailconfig", "nailfv", "nailgen", "nailkov", "nailrng", "nailstream"]
 
 [workspace.package]
 authors = ["Gonçalo Rica Pais da Silva <bluefinger@gmail.com>"]
@@ -11,6 +11,11 @@ license = "AGPL-3.0-only"
 rust-version = "1.86.0"
 
 [workspace.dependencies]
+axum = { version = "0.8.1", default-features = false, features = ["tokio", "http1", "http2"] }
+axum-core = { version = "0.5.0", default-features = false }
+bytes = "1.10.1"
+hyper = { version = "1.6.0", default-features = false, features = ["server"] }
+color-eyre = { version = "0.6.3", default-features = false }
 log = { version = "0.4.27", features = ["std"] }
 serde = { version = "1.0.219", features = ["derive"] }
 rand_core = "0.9.3"
@@ -21,29 +26,11 @@ hashbrown = { version = "0.15.2", default-features = false, features = [
     "equivalent",
     "inline-more",
 ] }
+fastrace = { version = "0.7.9" }
 unicode-segmentation = "1.12.0"
 itertools = "0.14.0"
 parking_lot = "0.12.3"
 indexmap = "2.9.0"
-
-[package]
-name = "nailpit"
-edition.workspace = true
-repository.workspace = true
-version.workspace = true
-authors.workspace = true
-rust-version.workspace = true
-license.workspace = true
-
-[features]
-tracing = ["fastrace/enable"]
-
-[dependencies]
-nailkov = { path = "nailkov" }
-axum = { version = "0.8.1", default-features = false, features = ["tokio", "http1", "http2"] }
-axum-core = { version = "0.5.0", default-features = false }
-hyper = { version = "1.6.0", default-features = false, features = ["server"] }
-hyper-util = { version = "0.1.10", default-features = false, features = ["server", "server-auto"] }
 tokio = { version = "1.44.2", features = [
     "rt",
     "rt-multi-thread",
@@ -54,23 +41,52 @@ tokio = { version = "1.44.2", features = [
     "signal",
 ] }
 tokio-stream = { version = "0.1.17" }
+
+[package]
+name = "nailpit"
+edition.workspace = true
+repository.workspace = true
+version.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+path = "src/main.rs"
+name = "nailpit"
+
+[features]
+tracing = ["fastrace/enable"]
+
+[dependencies]
+nailkov = { path = "nailkov" }
+nailrng = { path = "nailrng" }
+nailfv = { path = "nailfv" }
+nailconfig = { path = "nailconfig" }
+nailstream = { path = "nailstream" }
+nailgen = { path = "nailgen" }
+axum.workspace = true
+axum-core.workspace = true
+hyper.workspace = true
+tokio.workspace = true
+tokio-stream.workspace = true
 tower-service = { version = "0.3.3", default-features = false }
-color-eyre = { version = "0.6.3", default-features = false }
-wyrand = { workspace = true, features = ["threadrng_wyhash"] }
-getrandom = { version = "0.3.2", features = ["std"] }
+color-eyre.workspace = true
+wyrand.workspace = true
 rand_core.workspace = true
 rand.workspace = true
 log.workspace = true
-fastrace = { version = "0.7.9" }
+fastrace.workspace = true
 fastrace-axum = "0.1.0"
 logforth = { version = "0.23.1", features = ["fastrace"] }
 tower = { version = "0.5.2", features = ["buffer", "limit"] }
 futures-concurrency = "7.6.3"
-bytes = "1.10.1"
-futures-lite = "2.6.0"
+bytes.workspace = true
 scc = "2.3.3"
 parking_lot.workspace = true
-winnow = { version = "0.7.6", features = ["simd"] }
 tower-http = { version = "0.6.2", features = [
     "compression-br",
     "compression-gzip",
@@ -78,8 +94,6 @@ tower-http = { version = "0.6.2", features = [
     "normalize-path",
 ] }
 serde.workspace = true
-serde-aux = { version = "4.5.0", default-features = false }
-config = { version = "0.15.11", default-features = false, features = ["toml"] }
 glob = "0.3.2"
 
 [profile.release]
