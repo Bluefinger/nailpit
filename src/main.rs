@@ -9,8 +9,12 @@ use color_eyre::Result;
 use futures_concurrency::future::{Race, TryJoin};
 use logforth::append;
 use logforth::filter::EnvFilter;
+use mimalloc_safe::MiMalloc;
 use tokio::time::interval_at;
 use wyrand::RandomWyHashState;
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
 #[fastrace::trace]
 async fn nailpit_cleanup(state: nailpit::state::ServerState) {
@@ -51,7 +55,10 @@ where
     Ok(())
 }
 
-async fn nailpit_main(config: Arc<nailconfig::NailConfig>, inputs: Arc<[nailgen::MarkovGen]>) -> Result<()> {
+async fn nailpit_main(
+    config: Arc<nailconfig::NailConfig>,
+    inputs: Arc<[nailgen::MarkovGen]>,
+) -> Result<()> {
     let (shutdown_notifier, shutdown_signal) = tokio::sync::watch::channel(());
     let shutdown_notifier = Arc::new(shutdown_notifier);
     let state = nailpit::state::ServerState::new(
