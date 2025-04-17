@@ -65,7 +65,9 @@ path = "src/main.rs"
 name = "nailpit"
 
 [features]
+default = ["mimalloc"]
 tracing = ["fastrace/enable"]
+mimalloc = ["dep:mimalloc-safe"]
 
 [dependencies]
 nailkov = { path = "nailkov" }
@@ -101,6 +103,7 @@ tower-http = { version = "0.6.2", features = [
 ] }
 serde.workspace = true
 glob = "0.3.2"
+mimalloc-safe = { version = "0.1.50", optional = true }
 
 [profile.release]
 codegen-units = 1
