@@ -1,3 +1,6 @@
+//! Crate for defining a HTML generator based on a markov chain source, using a string
+//! interner to reduce memory usage both within a markov chain and across multiple chains.
+
 use std::{
     path::Path,
     sync::{Arc, LazyLock},

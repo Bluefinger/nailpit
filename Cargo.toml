@@ -10,6 +10,9 @@ version = "0.1.0"
 license = "AGPL-3.0-only"
 rust-version = "1.86.0"
 
+[workspace.lints.clippy]
+undocumented_unsafe_blocks = "warn"
+
 [workspace.dependencies]
 axum = { version = "0.8.1", default-features = false, features = ["tokio", "http1", "http2"] }
 axum-core = { version = "0.5.0", default-features = false }
@@ -50,6 +53,9 @@ version.workspace = true
 authors.workspace = true
 rust-version.workspace = true
 license.workspace = true
+
+[lints]
+workspace = true
 
 [lib]
 path = "src/lib.rs"

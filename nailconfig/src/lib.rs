@@ -1,3 +1,8 @@
+//! Crate for defining and handling `nailpit` configuration. Defines the main
+//! [`NailConfig`] struct, as well as the utility method to derive the config object
+//! from either `toml` files or environment variables, with the format
+//! `PIT__GENERATOR__TIMEOUT` as an example.
+
 use color_eyre::Result;
 use serde_aux::field_attributes::{
     deserialize_number_from_string, deserialize_option_number_from_string,

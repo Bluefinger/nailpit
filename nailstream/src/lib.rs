@@ -1,4 +1,7 @@
+//! Util for defining a customised HTTP stream response, but for text/html or other headers.
+
 use std::{
+    convert::Infallible,
     pin::Pin,
     task::{Context, Poll},
 };
@@ -12,7 +15,7 @@ use futures_lite::{Stream, StreamExt, stream::Boxed};
 use hyper::body::{Bytes, Frame};
 
 pub struct NailStream {
-    stream: Boxed<Result<Frame<Bytes>, axum::Error>>,
+    stream: Boxed<Result<Frame<Bytes>, Infallible>>,
     headers: Option<HeaderMap>,
 }
 
@@ -35,7 +38,7 @@ impl NailStream {
 
 impl hyper::body::Body for NailStream {
     type Data = Bytes;
-    type Error = axum::Error;
+    type Error = Infallible;
 
     fn poll_frame(
         mut self: Pin<&mut Self>,

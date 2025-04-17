@@ -1,5 +1,4 @@
-#![warn(clippy::undocumented_unsafe_blocks)]
-
+#![forbid(unsafe_code)]
 use std::{sync::LazyLock, time::Duration};
 
 use axum::http::HeaderValue;

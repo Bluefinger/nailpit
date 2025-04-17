@@ -1,3 +1,6 @@
+//! A very fast, user-space RNG source in the same vein as `rand`'s `ThreadRng`. Not cryptographically secure,
+//! is meant to be a very fast entropy source.
+
 use std::cell::UnsafeCell;
 
 use rand_core::RngCore;

@@ -89,7 +89,7 @@ impl Interner {
     /// # Safety
     ///
     /// The caller must ensure that `self.buffers` and `self.active` are never modified elsewhere,
-    /// and that this is only called for new instances of `text`.
+    /// and that this is called only for new instances of `text`.
     unsafe fn alloc(&mut self, text: &str) -> StringPtr {
         let capacity = self.buffer.capacity();
 

@@ -1,5 +1,4 @@
-#![warn(clippy::undocumented_unsafe_blocks)]
-
+#![forbid(unsafe_code)]
 use std::{
     net::SocketAddr,
     sync::Arc,

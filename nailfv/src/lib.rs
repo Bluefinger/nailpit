@@ -1,3 +1,6 @@
+//! Crate for parsing `Forwarded` header values, mostly only caring about the first (remotest)
+//! `for=` value. Supports both IPv6 and IPv4 and is case insensitive.
+
 use std::net::IpAddr;
 
 use winnow::{
