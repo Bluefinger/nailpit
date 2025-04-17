@@ -1,0 +1,17 @@
+[package]
+name = "nailfv"
+authors.workspace = true
+edition.workspace = true
+repository.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+winnow = { version = "0.7.6", features = ["simd"] }
+
+[dev-dependencies]
+color-eyre.workspace = true

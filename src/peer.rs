@@ -5,9 +5,7 @@ use axum::{
     http::request::Parts,
 };
 use hyper::{HeaderMap, StatusCode, header::FORWARDED};
-use winnow::Parser;
-
-use crate::fv_parser::extract_for;
+use nailfv::{Parser, extract_for};
 
 const X_REAL_IP: &str = "x-real-ip";
 const X_FORWARDED_FOR: &str = "x-forwarded-for";

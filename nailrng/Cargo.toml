@@ -1,0 +1,13 @@
+[package]
+name = "nailrng"
+authors.workspace = true
+edition.workspace = true
+repository.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+rand_core.workspace = true
+getrandom = { version = "0.3.2", features = ["std"] }
+wyrand = { workspace = true, features = ["threadrng_wyhash"] }

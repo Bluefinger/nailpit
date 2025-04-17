@@ -1,4 +1,5 @@
-#![warn(clippy::undocumented_unsafe_blocks)]
+//! Crate defining a Markov Chain implementation, and a string interner for use
+//! with the markov chain.
 
 mod distribution;
 mod error;

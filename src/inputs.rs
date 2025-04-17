@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use glob::glob;
-
-use crate::{config::NailConfig, markov::MarkovGen};
+use nailconfig::NailConfig;
+use nailgen::MarkovGen;
 
 /// Takes a glob for finding all input files and returns a read-only list of
 /// all markov chains that can be generated.

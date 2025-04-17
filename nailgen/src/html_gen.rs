@@ -1,15 +1,16 @@
 use std::iter::once;
 
 use bytes::{Bytes, BytesMut};
+use nailconfig::NailConfig;
 use nailkov::{NailKov, interner::Interner};
 use rand::{Rng, RngCore, distr::Alphanumeric};
 use std::iter::repeat_with;
 
-use crate::{INTERNER, state::AppConfig};
+use crate::INTERNER;
 
 /// Provides either the minimum configured size, or a randomised value between
 /// the minimum and maximum configured sizes if a maximum is available.
-pub fn get_desired_size(config: &AppConfig, rng: &mut impl RngCore) -> usize {
+pub fn get_desired_size(config: &NailConfig, rng: &mut impl RngCore) -> usize {
     match (
         config.generator.min_paragraph_size,
         config.generator.max_paragraph_size,
@@ -33,7 +34,7 @@ fn text_generator<'a>(
         .take(size)
 }
 
-pub fn title(chain: &NailKov, config: &AppConfig, rng: &mut impl RngCore) -> (Bytes, Bytes) {
+pub fn title(chain: &NailKov, config: &NailConfig, rng: &mut impl RngCore) -> (Bytes, Bytes) {
     let interner = INTERNER.read();
 
     let title_text: String = text_generator(&interner, chain, 24, rng).collect();
