@@ -1,38 +1,14 @@
 #![forbid(unsafe_code)]
-use std::{
-    net::SocketAddr,
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use color_eyre::Result;
-use futures_concurrency::future::{Race, TryJoin};
+use futures_concurrency::future::TryJoin;
 use logforth::append;
 use logforth::filter::EnvFilter;
 use mimalloc_safe::MiMalloc;
-use tokio::time::interval_at;
-use wyrand::RandomWyHashState;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
-
-#[fastrace::trace]
-async fn nailpit_cleanup(state: nailpit::state::ServerState) {
-    let tick_interval = Duration::from_secs(60 * 5);
-    let mut tick = interval_at((Instant::now() + tick_interval).into(), tick_interval);
-    loop {
-        tick.tick().await;
-
-        if state.sources.len() > 64 {
-            state
-                .sources
-                .retain_async(|_, v| v.last_seen.elapsed() >= nailpit::SOURCE_TIMEOUT)
-                .await;
-
-            log::info!("pit cleaned of corpses");
-        }
-    }
-}
 
 async fn spawn_axum_server<F>(state: nailpit::state::ServerState, shutdown: F) -> Result<()>
 where
@@ -61,22 +37,7 @@ async fn nailpit_main(
 ) -> Result<()> {
     let (shutdown_notifier, shutdown_signal) = tokio::sync::watch::channel(());
     let shutdown_notifier = Arc::new(shutdown_notifier);
-    let state = nailpit::state::ServerState::new(
-        Arc::new(scc::HashMap::with_capacity_and_hasher(
-            128,
-            RandomWyHashState::new(),
-        )),
-        config,
-        inputs,
-    );
-
-    tokio::spawn(
-        (
-            nailpit::shutdown::wait_for_shutdown(shutdown_notifier.clone()),
-            nailpit_cleanup(state.clone()),
-        )
-            .race(),
-    );
+    let state = nailpit::state::ServerState::new(config, inputs);
 
     (
         spawn_axum_server(
