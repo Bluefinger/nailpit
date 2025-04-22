@@ -1,9 +1,15 @@
 pit_routes = ["/private"]
 socket_addr = "0.0.0.0:3000"
+worker_threads = 4
 
 [generator]
 input_files = "input/*.txt"
 min_paragraph_size = 128
 max_paragraph_size = 256
+max_pit_links = 4
+header_size = 32
 payload_size = 100
 timeout = 60
+min_delay = 0
+max_delay = 100
+chunk_size = 4096

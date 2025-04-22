@@ -84,8 +84,8 @@ pub fn header(chain: &NailKov, size: usize, rng: &mut impl RngCore) -> Bytes {
     )
 }
 
-pub fn footer(route: &str, rng: &mut impl RngCore) -> Bytes {
-    let total_links = rng.random_range(1..=4);
+pub fn links(route: &str, max_links: usize, rng: &mut impl RngCore) -> Bytes {
+    let total_links = rng.random_range(1..=max_links);
 
     let link = repeat_with(|| {
         rng.sample_iter(Alphanumeric)
@@ -95,16 +95,25 @@ pub fn footer(route: &str, rng: &mut impl RngCore) -> Bytes {
     })
     .enumerate();
 
-    let mut footer = String::from("</article></main>\n<footer><nav><ul>");
+    let mut nav = String::from("<nav><ul>");
 
     for (i, link) in link.take(total_links) {
         let link = format!("<li><a href=\"{route}/{}\">{}</a></li>", link, i + 1);
-        footer = [footer, link].concat();
+        nav = [nav, link].concat();
     }
 
-    footer.push_str("</ul></nav></footer>\n</body>\n</html>");
+    nav.push_str("</ul></nav>");
 
-    Bytes::from(footer)
+    Bytes::from(nav)
+}
+
+pub fn footer(route: &str, max_links: usize, rng: &mut impl RngCore) -> Bytes {
+    let mut footer = BytesMut::from("</article></main>\n<footer>");
+
+    footer.extend(links(route, max_links, rng));
+    footer.extend(b"</footer>\n</body>\n</html>");
+
+    footer.freeze()
 }
 
 #[inline]

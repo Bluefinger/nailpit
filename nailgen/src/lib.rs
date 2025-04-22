@@ -18,8 +18,10 @@ use rand::{Rng, RngCore};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 
+use crate::delay::delay_output;
 use crate::html_gen::{footer, get_desired_size, header, paragraph, title};
 
+mod delay;
 mod html_gen;
 
 static INTERNER: LazyLock<Arc<RwLock<Interner>>> = LazyLock::new(Default::default);
@@ -44,22 +46,23 @@ impl MarkovGen {
     }
 
     fn generate(chain: &NailKov, config: &NailConfig, rng: &mut impl RngCore) -> Bytes {
-        let mut buffer = BytesMut::with_capacity(8192);
+        // Allocate more than we need, as we might generate more tokens than our 4kB threshold
+        let mut buffer = BytesMut::with_capacity(config.generator.chunk_size * 2);
 
         loop {
-            // We can generate more before handing it off to be streamed to the client,
-            // A bit more latency, but much more throughput, and friendlier to being compressed.
-            if buffer.len() >= 4096 {
-                return buffer.freeze();
-            }
-
             // Randomise how many paragraphs we want per section
             let max_paras: u32 = rng.random_range(1..=4);
 
-            buffer.extend(header(chain, 24, rng));
+            buffer.extend(header(chain, config.generator.header_size, rng));
 
             for _ in 0..max_paras {
                 buffer.extend(paragraph(chain, get_desired_size(config, rng), rng));
+            }
+
+            // We can generate more before handing it off to be streamed to the client,
+            // A bit more latency, but much more throughput, and friendlier to being compressed.
+            if buffer.len() >= config.generator.chunk_size {
+                return buffer.freeze();
             }
         }
     }
@@ -92,7 +95,8 @@ impl MarkovGen {
         initial_payload.extend(
             r#"    <meta charset="utf-8" />
     <meta name="robots" content="noindex, nofollow, nosnippet, noimageindex" />
-    <meta name="referrer" content="noreferrer">
+    <meta name="referrer" content="noreferrer" />
+    <meta name="color-theme" content="dark" />
 </head>
 <body><main><article>"#
                 .bytes(),
@@ -112,6 +116,8 @@ impl MarkovGen {
         let time_limit_duration = std::time::Duration::from_secs(config.generator.timeout);
         let size_limit = 1024 * config.generator.payload_size;
         loop {
+            delay_output(&config, &mut rng).await;
+
             if time_limit_duration.as_secs() != 0 && (start_time.elapsed() > time_limit_duration) {
                 log::info!(
                     "Time limit was reached ({} s), breaking stream",
@@ -144,7 +150,7 @@ impl MarkovGen {
             }
         }
 
-        let final_str = footer(path.as_str(), &mut rng);
+        let final_str = footer(path.as_str(), config.generator.max_pit_links, &mut rng);
 
         tx.send(final_str).await.ok();
     }
