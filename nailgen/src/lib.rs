@@ -4,7 +4,6 @@
 use std::{
     path::Path,
     sync::{Arc, LazyLock},
-    time::Duration,
 };
 
 use axum::extract::NestedPath;
@@ -16,25 +15,16 @@ use nailkov::{NailKov, interner::Interner};
 use nailrng::FastRng;
 use parking_lot::RwLock;
 use rand::{Rng, RngCore};
-use tokio::{sync::mpsc, time::sleep};
+use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 
+use crate::delay::delay_output;
 use crate::html_gen::{footer, get_desired_size, header, paragraph, title};
 
+mod delay;
 mod html_gen;
 
 static INTERNER: LazyLock<Arc<RwLock<Interner>>> = LazyLock::new(Default::default);
-
-async fn delay_output(config: &NailConfig, rng: &mut impl RngCore) {
-    let delay = match (config.generator.min_delay, config.generator.max_delay) {
-        (min_delay, None) => min_delay,
-        (min_delay, Some(max_delay)) => rng.random_range(min_delay..=max_delay),
-    };
-
-    if delay > 0 {
-        sleep(Duration::from_millis(delay)).await;
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct MarkovGen {
