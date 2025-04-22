@@ -12,6 +12,8 @@ use serde_aux::field_attributes::{
 pub struct NailConfig {
     pub pit_routes: Vec<String>,
     pub socket_addr: String,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    pub worker_threads: usize,
     pub generator: GeneratorConfig,
 }
 
@@ -26,6 +28,16 @@ pub struct GeneratorConfig {
     pub payload_size: usize,
     #[serde(deserialize_with = "deserialize_number_from_string")]
     pub timeout: u64,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    pub min_delay: u64,
+    #[serde(deserialize_with = "deserialize_option_number_from_string")]
+    pub max_delay: Option<u64>,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    pub chunk_size: usize,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    pub header_size: usize,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    pub max_pit_links: usize,
 }
 
 pub fn get_configuration() -> Result<NailConfig> {
@@ -37,7 +49,9 @@ pub fn get_configuration() -> Result<NailConfig> {
                 .format(config::FileFormat::Toml),
         )
         .add_source(
-            config::File::from(config_dir.join("pit.toml")).format(config::FileFormat::Toml),
+            config::File::from(config_dir.join("pit.toml"))
+                .required(false)
+                .format(config::FileFormat::Toml),
         )
         .add_source(
             config::Environment::with_prefix("PIT")

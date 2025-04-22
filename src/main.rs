@@ -117,7 +117,11 @@ fn main() -> Result<()> {
     let inputs = nailpit::inputs::get_input_files(&config)?;
 
     let rt = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(std::thread::available_parallelism()?.get().min(4))
+        .worker_threads(
+            std::thread::available_parallelism()?
+                .get()
+                .min(config.worker_threads),
+        )
         .enable_all()
         .build()?;
 
