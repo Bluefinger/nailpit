@@ -112,7 +112,7 @@ impl<S: BuildHasher + Clone + Default> NailBuilder<S> {
             .into_iter()
             .flat_map(|(pair, dist)| {
                 dist.build()
-                    .inspect_err(|err| log::error!("Weight error {:?}: {}", pair, err))
+                    .inspect_err(|err| log::error!("Weight error {pair:?}: {err}"))
                     .map(|build| (pair, build))
             })
             .collect();

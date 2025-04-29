@@ -73,7 +73,7 @@ fn main() -> Result<()> {
 
     let config: nailconfig::NailConfig = nailconfig::get_configuration()?;
 
-    log::info!("Loaded config: {:?}", config);
+    log::info!("Loaded config: {config:?}");
 
     let inputs = nailpit::inputs::get_input_files(&config)?;
 
