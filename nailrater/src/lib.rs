@@ -207,8 +207,8 @@ where
     ) -> std::task::Poll<Self::Output> {
         match self.project().state.project() {
             NailedStateProj::Pass { future, prune } => {
-                if let Some(mut prune) = prune.take() {
-                    ready!(prune.as_mut().poll(cx));
+                if let Some(pruning) = prune {
+                    ready!(pruning.as_mut().poll(cx));
                 }
 
                 future.poll(cx)
@@ -218,15 +218,15 @@ where
                 delay,
                 prune,
             } => {
-                if let Some(mut prune) = prune.take() {
-                    ready!(prune.as_mut().poll(cx));
+                if let Some(pruning) = prune {
+                    ready!(pruning.as_mut().poll(cx));
                 }
 
                 ready!(delay.as_mut().poll(cx));
 
                 future.poll(cx)
             }
-            NailedStateProj::Error { response } => Poll::Ready(Ok(response.take().expect("HUH"))),
+            NailedStateProj::Error { response } => Poll::Ready(Ok(response.take().unwrap())),
         }
     }
 }
