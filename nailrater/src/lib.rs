@@ -76,6 +76,50 @@ impl<S> NailRater<S> {
             inner,
         }
     }
+
+    fn track_visiting_peer(&self, proxied: IpAddr) -> PeerState {
+        self.peers
+            .entry(proxied)
+            .and_modify(|p| {
+                p.count += 1;
+                p.last_seen = Instant::now();
+                if p.count >= self.limit {
+                    p.state = PeerState::Limited;
+                }
+            })
+            .or_insert_with(|| Peer {
+                count: 1,
+                state: PeerState::Ready,
+                last_seen: Instant::now(),
+            })
+            .state
+    }
+
+    fn prune_recorded_peers(&mut self) -> Option<Pin<Box<dyn Future<Output = ()> + Send>>> {
+        match self.schedule_pruning {
+            None => {
+                self.schedule_pruning = Some(Instant::now());
+                None
+            }
+            Some(since) => {
+                if since.elapsed() >= crate::SOURCE_TIMEOUT {
+                    self.schedule_pruning = None;
+                    Some({
+                        let peers = self.peers.clone();
+
+                        async move {
+                            peers
+                                .retain_async(|_, v| v.last_seen.elapsed() < crate::SOURCE_TIMEOUT)
+                                .await
+                        }
+                        .boxed()
+                    })
+                } else {
+                    None
+                }
+            }
+        }
+    }
 }
 
 impl<S, ReqBody> tower::Service<Request<ReqBody>> for NailRater<S>
@@ -106,47 +150,11 @@ where
             };
         };
 
-        let prune = match self.schedule_pruning {
-            None => {
-                self.schedule_pruning = Some(Instant::now());
-                None
-            }
-            Some(since) => {
-                if since.elapsed() >= crate::SOURCE_TIMEOUT {
-                    self.schedule_pruning = None;
-                    Some({
-                        let peers = self.peers.clone();
+        let prune = self.prune_recorded_peers();
 
-                        async move {
-                            peers
-                                .retain_async(|_, v| v.last_seen.elapsed() < crate::SOURCE_TIMEOUT)
-                                .await
-                        }
-                        .boxed()
-                    })
-                } else {
-                    None
-                }
-            }
-        };
+        let peer = self.track_visiting_peer(proxied);
 
-        let peer = self
-            .peers
-            .entry(proxied)
-            .and_modify(|p| {
-                p.count += 1;
-                p.last_seen = Instant::now();
-                if p.count >= self.limit {
-                    p.state = PeerState::Limited;
-                }
-            })
-            .or_insert_with(|| Peer {
-                count: 1,
-                state: PeerState::Ready,
-                last_seen: Instant::now(),
-            });
-
-        if peer.state == PeerState::Limited {
+        if peer == PeerState::Limited {
             let inner = self.inner.call(req);
             let delay = sleep(Duration::from_millis(self.delay));
 

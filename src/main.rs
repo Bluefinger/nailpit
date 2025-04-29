@@ -90,7 +90,7 @@ fn main() -> Result<()> {
 
     log::info!("Waiting for background tasks to complete...");
 
-    // Wait at most 30 seconds for remaining background tasks to complete
+    // Wait at most 60 seconds for remaining background tasks to complete
     rt.shutdown_timeout(Duration::from_secs(60));
 
     log::info!("Everything shutdown gracefully. Good night :)");
