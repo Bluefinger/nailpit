@@ -1,26 +1,25 @@
+mod futures;
+mod maybe_headers;
+
 use std::{
     net::{IpAddr, SocketAddr},
-    pin::Pin,
     sync::Arc,
-    task::Poll,
     time::{Duration, Instant},
 };
 
 use axum::{
     body::Body,
     extract::{ConnectInfo, Request},
-    response::{IntoResponse, Response},
+    response::Response,
 };
-use futures_lite::{FutureExt, future::Boxed, ready};
-use hyper::{HeaderMap, StatusCode, header::FORWARDED};
-use nailfv::{Parser, extract_for};
-use pin_project_lite::pin_project;
+use futures::NailedResponseFuture;
+use futures_lite::{FutureExt, future::Boxed};
+use hyper::HeaderMap;
+use maybe_headers::{maybe_forwarded, maybe_x_forwarded_for, maybe_x_real_ip};
 use scc::HashMap;
-use tokio::time::{Sleep, sleep};
+use tokio::time::sleep;
 use wyrand::RandomWyHashState;
 
-const X_REAL_IP: &str = "x-real-ip";
-const X_FORWARDED_FOR: &str = "x-forwarded-for";
 const SOURCE_TIMEOUT: Duration = Duration::from_secs(60 * 2);
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -77,6 +76,16 @@ impl<S> NailRater<S> {
         }
     }
 
+    fn extract(
+        headers: &HeaderMap,
+        connection: Option<&ConnectInfo<SocketAddr>>,
+    ) -> Option<IpAddr> {
+        maybe_x_forwarded_for(headers)
+            .or_else(|| maybe_x_real_ip(headers))
+            .or_else(|| maybe_forwarded(headers))
+            .or_else(|| connection.map(|connect_info| connect_info.ip()))
+    }
+
     fn track_visiting_peer(&self, proxied: IpAddr) -> PeerState {
         self.peers
             .entry(proxied)
@@ -95,7 +104,7 @@ impl<S> NailRater<S> {
             .state
     }
 
-    fn prune_recorded_peers(&mut self) -> Option<Pin<Box<dyn Future<Output = ()> + Send>>> {
+    fn prune_recorded_peers(&mut self) -> Option<Boxed<()>> {
         match self.schedule_pruning {
             None => {
                 self.schedule_pruning = Some(Instant::now());
@@ -139,144 +148,25 @@ where
     }
 
     fn call(&mut self, req: Request<ReqBody>) -> Self::Future {
-        let Some(proxied) = extract(
+        let Some(proxied) = Self::extract(
             req.headers(),
             req.extensions().get::<ConnectInfo<SocketAddr>>(),
         ) else {
-            return NailedResponseFuture {
-                state: NailedState::Error {
-                    response: Some((StatusCode::FORBIDDEN, "What are you hiding?").into_response()),
-                },
-            };
+            return NailedResponseFuture::error();
+        };
+
+        let peer = self.track_visiting_peer(proxied);
+
+        let delay = if peer == PeerState::Limited {
+            Some(Box::pin(sleep(Duration::from_millis(self.delay))))
+        } else {
+            None
         };
 
         let prune = self.prune_recorded_peers();
 
-        let peer = self.track_visiting_peer(proxied);
+        let inner = self.inner.call(req);
 
-        if peer == PeerState::Limited {
-            let inner = self.inner.call(req);
-            let delay = sleep(Duration::from_millis(self.delay));
-
-            NailedResponseFuture {
-                state: NailedState::Limited {
-                    future: inner,
-                    delay: Box::pin(delay),
-                    prune,
-                },
-            }
-        } else {
-            NailedResponseFuture {
-                state: NailedState::Pass {
-                    future: self.inner.call(req),
-                    prune,
-                },
-            }
-        }
+        NailedResponseFuture::normal(prune, delay, inner)
     }
-}
-
-pin_project! {
-    pub struct NailedResponseFuture<T> {
-        #[pin]
-        state: NailedState<T>,
-    }
-}
-
-pin_project! {
-    #[project = NailedStateProj]
-    enum NailedState<T> {
-        Pass {
-            #[pin]
-            future: T,
-            prune: Option<Boxed<()>>,
-        },
-        Limited {
-            #[pin]
-            future: T,
-            delay: Pin<Box<Sleep>>,
-            prune: Option<Boxed<()>>,
-        },
-        Error {
-            response: Option<Response<Body>>
-        }
-    }
-}
-
-impl<E, F> Future for NailedResponseFuture<F>
-where
-    F: Future<Output = Result<Response<Body>, E>>,
-{
-    type Output = Result<Response<Body>, E>;
-
-    fn poll(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Self::Output> {
-        match self.project().state.project() {
-            NailedStateProj::Pass { future, prune } => {
-                if let Some(pruning) = prune {
-                    ready!(pruning.as_mut().poll(cx));
-                }
-
-                future.poll(cx)
-            }
-            NailedStateProj::Limited {
-                future,
-                delay,
-                prune,
-            } => {
-                if let Some(pruning) = prune {
-                    ready!(pruning.as_mut().poll(cx));
-                }
-
-                ready!(delay.as_mut().poll(cx));
-
-                future.poll(cx)
-            }
-            NailedStateProj::Error { response } => Poll::Ready(Ok(response.take().unwrap())),
-        }
-    }
-}
-
-fn extract(headers: &HeaderMap, connection: Option<&ConnectInfo<SocketAddr>>) -> Option<IpAddr> {
-    maybe_x_forwarded_for(headers)
-        .or_else(|| maybe_x_real_ip(headers))
-        .or_else(|| maybe_forwarded(headers))
-        .or_else(|| connection.map(|connect_info| connect_info.ip()))
-}
-
-/// Tries to parse the `x-forwarded-for` header
-fn maybe_x_forwarded_for(headers: &HeaderMap) -> Option<IpAddr> {
-    headers
-        .get(X_FORWARDED_FOR)
-        .and_then(|header_value| header_value.to_str().ok())
-        .and_then(|header| {
-            header
-                .split(',')
-                .map(str::trim)
-                .filter(|&header_parts| !header_parts.is_empty())
-                .find_map(|part| part.parse().ok())
-        })
-}
-
-/// Tries to parse the `x-real-ip` header
-fn maybe_x_real_ip(headers: &HeaderMap) -> Option<IpAddr> {
-    headers
-        .get(X_REAL_IP)
-        .and_then(|header_value| header_value.to_str().ok())
-        .and_then(|header| header.trim().parse().ok())
-}
-
-/// Tries to parse `forwarded` headers
-fn maybe_forwarded(headers: &HeaderMap) -> Option<IpAddr> {
-    headers.get_all(FORWARDED).iter().find_map(|header_value| {
-        header_value.to_str().ok().and_then(|header| {
-            header
-                .split(&[',', ';'])
-                .map(str::trim)
-                .filter(|&header_parts| !header_parts.is_empty())
-                .find_map(|header_parts| extract_for.parse(header_parts).ok())
-        })
-    })
 }
