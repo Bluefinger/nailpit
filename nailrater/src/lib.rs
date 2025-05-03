@@ -104,30 +104,23 @@ impl<S> NailRater<S> {
             .state
     }
 
-    fn prune_recorded_peers(&mut self) -> Option<Boxed<()>> {
-        match self.schedule_pruning {
-            None => {
-                self.schedule_pruning = Some(Instant::now());
-                None
-            }
-            Some(since) => {
-                if since.elapsed() >= crate::SOURCE_TIMEOUT {
-                    self.schedule_pruning = None;
-                    Some({
-                        let peers = self.peers.clone();
-
-                        async move {
-                            peers
-                                .retain_async(|_, v| v.last_seen.elapsed() < crate::SOURCE_TIMEOUT)
-                                .await
-                        }
-                        .boxed()
-                    })
-                } else {
-                    None
-                }
-            }
+    fn prune(peers: Arc<HashMap<IpAddr, Peer, RandomWyHashState>>) -> Boxed<()> {
+        async move {
+            peers
+                .retain_async(|_, v| v.last_seen.elapsed() < crate::SOURCE_TIMEOUT)
+                .await
         }
+        .boxed()
+    }
+
+    fn prune_recorded_peers(&mut self) -> Option<Boxed<()>> {
+        if self.schedule_pruning.is_none() {
+            self.schedule_pruning.replace(Instant::now());
+        }
+
+        self.schedule_pruning
+            .take_if(|since| since.elapsed() >= crate::SOURCE_TIMEOUT)
+            .map(|_| Self::prune(self.peers.clone()))
     }
 }
 
