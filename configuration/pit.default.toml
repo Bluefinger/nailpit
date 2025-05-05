@@ -13,3 +13,7 @@ timeout = 60
 min_delay = 0
 max_delay = 100
 chunk_size = 4096
+
+[rate_limiting]
+soft_limit = 100
+soft_limit_delay = 500

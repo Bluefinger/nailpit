@@ -47,7 +47,7 @@ tokio-stream = { version = "0.1.17" }
 futures-lite = "2.6.0"
 pin-project-lite = "0.2.16"
 scc = "2.3.3"
-tower = { version = "0.5.2", features = ["buffer"] }
+tower = { version = "0.5.2" }
 
 [package]
 name = "nailpit"

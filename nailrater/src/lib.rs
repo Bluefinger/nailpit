@@ -16,6 +16,7 @@ use futures::NailedResponseFuture;
 use futures_lite::{FutureExt, future::Boxed};
 use hyper::HeaderMap;
 use maybe_headers::{maybe_forwarded, maybe_x_forwarded_for, maybe_x_real_ip};
+use nailconfig::RateLimitingConfig;
 use scc::HashMap;
 use tokio::time::sleep;
 use wyrand::RandomWyHashState;
@@ -26,7 +27,8 @@ const SOURCE_TIMEOUT: Duration = Duration::from_secs(60 * 2);
 enum PeerState {
     #[default]
     Ready,
-    Limited,
+    Delay,
+    Drop,
 }
 
 #[derive(Debug, Clone)]
@@ -38,13 +40,24 @@ struct Peer {
 
 #[derive(Debug, Clone)]
 pub struct NailRaterLayer {
-    limit: u64,
-    delay: u64,
+    soft_limit: u64,
+    hard_limit: Option<u64>,
+    soft_limit_delay: u64,
 }
 
 impl NailRaterLayer {
-    pub fn new(limit: u64, delay: u64) -> Self {
-        Self { limit, delay }
+    pub fn new(
+        RateLimitingConfig {
+            soft_limit,
+            hard_limit,
+            soft_limit_delay,
+        }: &RateLimitingConfig,
+    ) -> Self {
+        Self {
+            soft_limit: *soft_limit,
+            hard_limit: *hard_limit,
+            soft_limit_delay: *soft_limit_delay,
+        }
     }
 }
 
@@ -52,25 +65,36 @@ impl<S> tower::Layer<S> for NailRaterLayer {
     type Service = NailRater<S>;
 
     fn layer(&self, inner: S) -> Self::Service {
-        NailRater::new(self.limit, self.delay, inner)
+        NailRater::new(
+            self.soft_limit,
+            self.soft_limit_delay,
+            self.hard_limit,
+            inner,
+        )
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct NailRater<S> {
     peers: Arc<HashMap<IpAddr, Peer, RandomWyHashState>>,
-    limit: u64,
-    delay: u64,
+    soft_limit: u64,
+    soft_limit_delay: u64,
+    hard_limit: Option<u64>,
     schedule_pruning: Option<Instant>,
     inner: S,
 }
 
 impl<S> NailRater<S> {
-    pub fn new(limit: u64, delay: u64, inner: S) -> Self {
+    pub fn new(soft_limit: u64, soft_limit_delay: u64, hard_limit: Option<u64>, inner: S) -> Self {
+        if hard_limit.is_some_and(|limit| limit < soft_limit) {
+            panic!("Invalid rate limit configuration. Hard limit is less than soft limit");
+        }
+
         Self {
             peers: Default::default(),
-            limit,
-            delay,
+            soft_limit,
+            soft_limit_delay,
+            hard_limit,
             schedule_pruning: None,
             inner,
         }
@@ -92,8 +116,11 @@ impl<S> NailRater<S> {
             .and_modify(|p| {
                 p.count += 1;
                 p.last_seen = Instant::now();
-                if p.count >= self.limit {
-                    p.state = PeerState::Limited;
+                if p.count >= self.soft_limit && self.hard_limit.is_none_or(|limit| p.count < limit)
+                {
+                    p.state = PeerState::Delay;
+                } else if self.hard_limit.is_some_and(|limit| p.count >= limit) {
+                    p.state = PeerState::Drop;
                 }
             })
             .or_insert_with(|| Peer {
@@ -150,10 +177,12 @@ where
 
         let peer = self.track_visiting_peer(proxied);
 
-        let delay = if peer == PeerState::Limited {
-            Some(Box::pin(sleep(Duration::from_millis(self.delay))))
-        } else {
-            None
+        let delay = match peer {
+            PeerState::Ready => None,
+            PeerState::Delay => Some(Box::pin(sleep(Duration::from_millis(
+                self.soft_limit_delay,
+            )))),
+            PeerState::Drop => return NailedResponseFuture::dropped(),
         };
 
         let prune = self.prune_recorded_peers();

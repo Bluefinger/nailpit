@@ -9,6 +9,7 @@ rust-version.workspace = true
 
 [dependencies]
 nailfv = { path = "../nailfv" }
+nailconfig = { path = "../nailconfig" }
 axum.workspace = true
 futures-lite.workspace = true
 hyper.workspace = true

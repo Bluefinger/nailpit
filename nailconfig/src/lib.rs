@@ -15,6 +15,7 @@ pub struct NailConfig {
     #[serde(deserialize_with = "deserialize_number_from_string")]
     pub worker_threads: usize,
     pub generator: GeneratorConfig,
+    pub rate_limiting: RateLimitingConfig,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -38,6 +39,16 @@ pub struct GeneratorConfig {
     pub header_size: usize,
     #[serde(deserialize_with = "deserialize_number_from_string")]
     pub max_pit_links: usize,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct RateLimitingConfig {
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    pub soft_limit: u64,
+    #[serde(deserialize_with = "deserialize_option_number_from_string")]
+    pub hard_limit: Option<u64>,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    pub soft_limit_delay: u64,
 }
 
 pub fn get_configuration() -> Result<NailConfig> {

@@ -26,6 +26,7 @@ pin_project! {
             #[pin]
             state: NailedNormalFuture<T>,
         },
+        Dropped,
         Error,
     }
 }
@@ -54,6 +55,12 @@ impl<T> NailedResponseFuture<T> {
         };
 
         Self { state: fut }
+    }
+
+    pub fn dropped() -> Self {
+        Self {
+            state: NailedState::Dropped,
+        }
     }
 
     pub fn error() -> Self {
@@ -95,6 +102,7 @@ where
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match self.project().state.project() {
             NailedStateProj::Normal { state } => state.poll(cx),
+            NailedStateProj::Dropped => Poll::Ready(Ok((StatusCode::TOO_MANY_REQUESTS, "Go away").into_response())),
             NailedStateProj::Error => {
                 Poll::Ready(Ok(
                     (StatusCode::FORBIDDEN, "What are you hiding?").into_response()
