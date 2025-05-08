@@ -32,7 +32,7 @@ pub fn nail_app(state: ServerState) -> Router {
                 .layer(fastrace_axum::FastraceLayer)
                 .layer(NormalizePathLayer::trim_trailing_slash())
                 .layer(CompressionLayer::new().quality(tower_http::CompressionLevel::Default))
-                .layer(NailRaterLayer::new(&state.config.rate_limiting)),
+                .layer(NailRaterLayer::new(state.config.rate_limiting.clone())),
         )
         .route("/health", get(async || StatusCode::NO_CONTENT))
 }

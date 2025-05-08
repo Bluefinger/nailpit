@@ -15,6 +15,7 @@ pub struct NailConfig {
     #[serde(deserialize_with = "deserialize_number_from_string")]
     pub worker_threads: usize,
     pub generator: GeneratorConfig,
+    #[serde(default)]
     pub rate_limiting: RateLimitingConfig,
 }
 
@@ -41,14 +42,33 @@ pub struct GeneratorConfig {
     pub max_pit_links: usize,
 }
 
-#[derive(Debug, serde::Deserialize)]
-pub struct RateLimitingConfig {
-    #[serde(deserialize_with = "deserialize_number_from_string")]
-    pub soft_limit: u64,
-    #[serde(deserialize_with = "deserialize_option_number_from_string")]
-    pub hard_limit: Option<u64>,
-    #[serde(deserialize_with = "deserialize_number_from_string")]
-    pub soft_limit_delay: u64,
+#[derive(Debug, Default, Clone, PartialEq, Eq, serde::Deserialize)]
+#[serde(tag = "type")]
+pub enum RateLimitingConfig {
+    #[default]
+    #[serde(rename = "no_limit")]
+    NoLimit,
+    #[serde(rename = "soft_limit")]
+    SoftLimit {
+        #[serde(deserialize_with = "deserialize_number_from_string")]
+        soft_limit: u64,
+        #[serde(deserialize_with = "deserialize_number_from_string")]
+        soft_delay: u64,
+    },
+    #[serde(rename = "hard_limit")]
+    HardLimit {
+        #[serde(deserialize_with = "deserialize_number_from_string")]
+        hard_limit: u64,
+    },
+    #[serde(rename = "soft_with_hard_limit")]
+    SoftWithHardLimit {
+        #[serde(deserialize_with = "deserialize_number_from_string")]
+        soft_limit: u64,
+        #[serde(deserialize_with = "deserialize_number_from_string")]
+        hard_limit: u64,
+        #[serde(deserialize_with = "deserialize_number_from_string")]
+        soft_delay: u64,
+    },
 }
 
 pub fn get_configuration() -> Result<NailConfig> {

@@ -15,5 +15,6 @@ max_delay = 100
 chunk_size = 4096
 
 [rate_limiting]
-soft_limit = 100
-soft_limit_delay = 500
+type = "soft_limit"
+soft_limit = 200
+soft_delay = 600
