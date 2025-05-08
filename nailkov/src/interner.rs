@@ -4,6 +4,13 @@ use wyrand::RandomWyHashState;
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct InternedString(u32);
 
+impl InternedString {
+    #[inline(always)]
+    pub const fn to_bits(&self) -> u32 {
+        self.0
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct StringPtr(*const str);
 

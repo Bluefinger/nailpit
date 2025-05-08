@@ -36,7 +36,7 @@ impl<R: RngCore, S: BuildHasher> Iterator for NailKovIter<'_, R, S> {
     fn next(&mut self) -> Option<Self::Item> {
         let next_token = self.chain.generate_next_token(&mut self.rng, self.prev)?;
 
-        self.prev = TokenPair::new(self.prev.1, next_token);
+        self.prev = TokenPair::new(self.prev.right, next_token);
 
         Some(next_token)
     }
