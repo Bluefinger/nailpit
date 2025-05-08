@@ -7,7 +7,7 @@ pub mod interner;
 mod token;
 
 use error::NailError;
-use hashbrown::HashMap;
+use indexmap::IndexMap;
 use interner::Interner;
 use itertools::Itertools;
 use rand::{RngCore, seq::IteratorRandom};
@@ -21,7 +21,7 @@ use wyrand::RandomWyHashState;
 
 #[derive(Clone, Debug)]
 pub struct NailKov<S = RandomWyHashState> {
-    chain: HashMap<TokenPair, TokenWeights, S>,
+    chain: IndexMap<TokenPair, TokenWeights, S>,
 }
 
 pub struct NailKovIter<'a, R: RngCore, S = RandomWyHashState> {
@@ -36,7 +36,7 @@ impl<R: RngCore, S: BuildHasher> Iterator for NailKovIter<'_, R, S> {
     fn next(&mut self) -> Option<Self::Item> {
         let next_token = self.chain.generate_next_token(&mut self.rng, self.prev)?;
 
-        self.prev = TokenPair::new(self.prev.1, next_token);
+        self.prev = TokenPair::new(self.prev.right, next_token);
 
         Some(next_token)
     }
@@ -88,13 +88,13 @@ impl<S: BuildHasher + Clone + Default> NailKov<S> {
 
 #[derive(Debug)]
 struct NailBuilder<S = RandomWyHashState> {
-    chain: HashMap<TokenPair, TokenWeightsBuilder<S>, S>,
+    chain: IndexMap<TokenPair, TokenWeightsBuilder<S>, S>,
 }
 
 impl<S: BuildHasher + Clone + Default> NailBuilder<S> {
     fn new(hasher: S) -> Self {
         Self {
-            chain: HashMap::with_hasher(hasher),
+            chain: IndexMap::with_hasher(hasher),
         }
     }
 
@@ -107,7 +107,7 @@ impl<S: BuildHasher + Clone + Default> NailBuilder<S> {
             return Err(NailError::EmptyInput);
         }
 
-        let chain: HashMap<TokenPair, TokenWeights, S> = self
+        let chain: IndexMap<TokenPair, TokenWeights, S> = self
             .chain
             .into_iter()
             .flat_map(|(pair, dist)| {

@@ -14,7 +14,6 @@ workspace = true
 rand.workspace = true
 rand_distr.workspace = true
 wyrand.workspace = true
-hashbrown.workspace = true
 itertools.workspace = true
 unicode-segmentation.workspace = true
 log.workspace = true

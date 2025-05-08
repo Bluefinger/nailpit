@@ -2,7 +2,7 @@
 //! a [`TokenPair`](crate::token::TokenPair) in a [`NailKov`](crate::NailKov).
 
 use core::hash::BuildHasher;
-use hashbrown::HashMap;
+use indexmap::IndexMap;
 use rand::Rng;
 use rand_distr::{Distribution, weighted::WeightedAliasIndex};
 use wyrand::RandomWyHashState;
@@ -30,13 +30,13 @@ impl Distribution<Token> for TokenWeights {
 #[derive(Clone, Debug)]
 pub struct TokenWeightsBuilder<S = RandomWyHashState> {
     /// Counts how many times a token is likely to appear.
-    occurrences: HashMap<Token, u64, S>,
+    occurrences: IndexMap<Token, u64, S>,
 }
 
 impl<S: BuildHasher> TokenWeightsBuilder<S> {
     pub fn new(hasher: S) -> Self {
         Self {
-            occurrences: HashMap::with_hasher(hasher),
+            occurrences: IndexMap::with_hasher(hasher),
         }
     }
 
