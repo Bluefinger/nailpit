@@ -17,6 +17,11 @@ impl Token {
     pub const fn id(&self) -> InternedString {
         self.0
     }
+
+    #[inline(always)]
+    pub const fn to_bits(self) -> u32 {
+        self.0.to_bits()
+    }
 }
 
 impl From<InternedString> for Token {
@@ -90,7 +95,7 @@ impl TokenPair {
 
     #[inline(always)]
     const fn to_bits(self) -> u64 {
-        self.left.id().to_bits() as u64 | ((self.right.id().to_bits() as u64) << 32)
+        self.left.to_bits() as u64 | ((self.right.to_bits() as u64) << 32)
     }
 }
 

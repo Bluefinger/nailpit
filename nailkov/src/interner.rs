@@ -6,7 +6,7 @@ pub struct InternedString(u32);
 
 impl InternedString {
     #[inline(always)]
-    pub const fn to_bits(&self) -> u32 {
+    pub const fn to_bits(self) -> u32 {
         self.0
     }
 }
