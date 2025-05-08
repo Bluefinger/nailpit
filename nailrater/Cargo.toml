@@ -1,0 +1,23 @@
+[package]
+name = "nailrater"
+authors.workspace = true
+edition.workspace = true
+repository.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+nailfv = { path = "../nailfv" }
+nailconfig = { path = "../nailconfig" }
+axum.workspace = true
+futures-lite.workspace = true
+hyper.workspace = true
+pin-project-lite.workspace = true
+scc.workspace = true
+tokio.workspace = true
+wyrand.workspace = true
+tower.workspace = true
+
+[lints]
+workspace = true

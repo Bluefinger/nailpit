@@ -13,4 +13,4 @@ workspace = true
 [dependencies]
 axum.workspace = true
 hyper.workspace = true
-futures-lite = "2.6.0"
+futures-lite.workspace = true

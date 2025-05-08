@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["nailconfig", "nailfv", "nailgen", "nailkov", "nailrng", "nailstream"]
+members = ["nailconfig", "nailfv", "nailgen", "nailkov", "nailrater", "nailrng", "nailstream"]
 
 [workspace.package]
 authors = ["Gonçalo Rica Pais da Silva <bluefinger@gmail.com>"]
@@ -44,6 +44,10 @@ tokio = { version = "1.44.2", features = [
     "signal",
 ] }
 tokio-stream = { version = "0.1.17" }
+futures-lite = "2.6.0"
+pin-project-lite = "0.2.16"
+scc = "2.3.3"
+tower = { version = "0.5.2" }
 
 [package]
 name = "nailpit"
@@ -72,10 +76,10 @@ mimalloc = ["dep:mimalloc-safe"]
 [dependencies]
 nailkov = { path = "nailkov" }
 nailrng = { path = "nailrng" }
-nailfv = { path = "nailfv" }
 nailconfig = { path = "nailconfig" }
 nailstream = { path = "nailstream" }
 nailgen = { path = "nailgen" }
+nailrater = { path = "nailrater" }
 axum.workspace = true
 axum-core.workspace = true
 hyper.workspace = true
@@ -90,10 +94,10 @@ log.workspace = true
 fastrace.workspace = true
 fastrace-axum = "0.1.0"
 logforth = { version = "0.23.1", features = ["fastrace"] }
-tower = { version = "0.5.2", features = ["buffer", "limit"] }
+tower.workspace = true
 futures-concurrency = "7.6.3"
 bytes.workspace = true
-scc = "2.3.3"
+scc.workspace = true
 parking_lot.workspace = true
 tower-http = { version = "0.6.2", features = [
     "compression-br",
@@ -103,7 +107,9 @@ tower-http = { version = "0.6.2", features = [
 ] }
 serde.workspace = true
 glob = "0.3.2"
+futures-lite.workspace = true
 mimalloc-safe = { version = "0.1.50", optional = true }
+pin-project-lite.workspace = true
 
 [profile.release]
 codegen-units = 1

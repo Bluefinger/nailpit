@@ -1,18 +1,15 @@
 #![forbid(unsafe_code)]
-use std::{sync::LazyLock, time::Duration};
+use std::sync::LazyLock;
 
 use axum::http::HeaderValue;
-use hyper::{header::CONTENT_TYPE, HeaderMap};
+use hyper::{HeaderMap, header::CONTENT_TYPE};
 
 pub mod inputs;
-mod peer;
 pub mod routes;
 pub mod shutdown;
 pub mod state;
 
 static INDEX: &str = include_str!("../templates/warning.html");
-
-pub const SOURCE_TIMEOUT: Duration = Duration::from_secs(60 * 2);
 
 static GEN_HEADER: LazyLock<HeaderMap> = LazyLock::new(|| {
     let mut headers = HeaderMap::new();
@@ -22,4 +19,3 @@ static GEN_HEADER: LazyLock<HeaderMap> = LazyLock::new(|| {
     );
     headers
 });
-
