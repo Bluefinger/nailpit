@@ -2,7 +2,7 @@ use indexmap::{Equivalent, IndexMap};
 use wyrand::RandomWyHashState;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub struct InternedString(u32);
+pub struct InternedString(pub(crate) u32);
 
 impl InternedString {
     #[inline(always)]

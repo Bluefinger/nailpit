@@ -104,3 +104,27 @@ impl AsRef<TokenPair> for TokenPair {
         self
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn token_smoke_testing() {
+        let left = Token(InternedString(0x2));
+        let right = Token(InternedString(0x2b));
+
+        let pair = TokenPair::new(left, right);
+
+        assert_eq!(pair.to_bits(), 0x2b00000002);
+        assert_eq!(pair.left, left);
+        assert_eq!(pair.right, right);
+
+        let other_right = Token(InternedString(0x2c));
+
+        let other_pair = TokenPair::new(left, other_right);
+
+        assert_eq!(other_pair.to_bits(), 0x2c00000002);
+        assert_ne!(pair, other_pair);
+    }
+}
