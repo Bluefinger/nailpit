@@ -5,7 +5,8 @@
 
 use color_eyre::Result;
 use serde_aux::field_attributes::{
-    deserialize_number_from_string, deserialize_option_number_from_string,
+    deserialize_bool_from_anything, deserialize_number_from_string,
+    deserialize_option_number_from_string,
 };
 
 #[derive(Debug, serde::Deserialize)]
@@ -17,6 +18,7 @@ pub struct NailConfig {
     pub generator: GeneratorConfig,
     #[serde(default)]
     pub rate_limiting: RateLimitingConfig,
+    pub open_telemetry: OpenTelemetryConfig,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -69,6 +71,16 @@ pub enum RateLimitingConfig {
         #[serde(deserialize_with = "deserialize_number_from_string")]
         soft_delay: u64,
     },
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct OpenTelemetryConfig {
+    pub endpoint: String,
+    pub service_name: String,
+    #[serde(deserialize_with = "deserialize_bool_from_anything")]
+    pub logs: bool,
+    #[serde(deserialize_with = "deserialize_bool_from_anything")]
+    pub traces: bool,
 }
 
 pub fn get_configuration() -> Result<NailConfig> {
