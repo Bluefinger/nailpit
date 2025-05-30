@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["nailconfig", "nailfv", "nailgen", "nailkov", "nailrater", "nailrng", "nailstream"]
+members = ["nailconfig", "nailfv", "nailgen", "nailkov", "nailrater", "nailrng", "nailstream", "nailtrace"]
 
 [workspace.package]
 authors = ["Gonçalo Rica Pais da Silva <bluefinger@gmail.com>"]
@@ -30,6 +30,7 @@ hashbrown = { version = "0.15.2", default-features = false, features = [
     "inline-more",
 ] }
 fastrace = { version = "0.7.9" }
+fastrace-futures = { version = "0.7.9" }
 unicode-segmentation = "1.12.0"
 itertools = "0.14.0"
 parking_lot = "0.12.3"
@@ -48,6 +49,14 @@ futures-lite = "2.6.0"
 pin-project-lite = "0.2.16"
 scc = "2.3.3"
 tower = { version = "0.5.2" }
+tower-http = { version = "0.6.2", features = [
+    "compression-br",
+    "compression-gzip",
+    "compression-zstd",
+    "normalize-path",
+    "request-id",
+    "util"
+] }
 
 [package]
 name = "nailpit"
@@ -80,6 +89,7 @@ nailconfig = { path = "nailconfig" }
 nailstream = { path = "nailstream" }
 nailgen = { path = "nailgen" }
 nailrater = { path = "nailrater" }
+nailtrace = { path = "nailtrace" }
 axum.workspace = true
 axum-core.workspace = true
 hyper.workspace = true
@@ -92,24 +102,23 @@ rand_core.workspace = true
 rand.workspace = true
 log.workspace = true
 fastrace.workspace = true
-fastrace-axum = "0.1.0"
-logforth = { version = "0.23.1", features = ["fastrace"] }
+fastrace-futures.workspace = true
+logforth = { version = "0.25", features = ["fastrace", "opentelemetry"] }
 tower.workspace = true
 futures-concurrency = "7.6.3"
 bytes.workspace = true
 scc.workspace = true
 parking_lot.workspace = true
-tower-http = { version = "0.6.2", features = [
-    "compression-br",
-    "compression-gzip",
-    "compression-zstd",
-    "normalize-path",
-] }
+tower-http.workspace = true
 serde.workspace = true
 glob = "0.3.2"
 futures-lite.workspace = true
 mimalloc-safe = { version = "0.1.50", optional = true }
 pin-project-lite.workspace = true
+fastrace-opentelemetry = "0.10.0"
+opentelemetry = { version = "0.29.1", default-features = false, features = ["trace", "logs", "metrics"] }
+opentelemetry-otlp = { version = "0.29.0", default-features = false, features = ["trace", "logs", "metrics", "grpc-tonic", "zstd-tonic"] }
+opentelemetry_sdk = { version = "0.29.0", default-features = false, features = ["trace", "logs", "metrics"] }
 
 [profile.release]
 codegen-units = 1

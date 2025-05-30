@@ -71,10 +71,7 @@ pub struct ServerState {
 }
 
 impl ServerState {
-    pub fn new(
-        config: impl Into<AppConfig>,
-        inputs: impl Into<NailInputs>,
-    ) -> Self {
+    pub fn new(config: impl Into<AppConfig>, inputs: impl Into<NailInputs>) -> Self {
         let config = config.into();
 
         Self {

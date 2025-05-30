@@ -102,7 +102,9 @@ where
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match self.project().state.project() {
             NailedStateProj::Normal { state } => state.poll(cx),
-            NailedStateProj::Dropped => Poll::Ready(Ok((StatusCode::TOO_MANY_REQUESTS, "Go away").into_response())),
+            NailedStateProj::Dropped => Poll::Ready(Ok(
+                (StatusCode::TOO_MANY_REQUESTS, "Go away").into_response()
+            )),
             NailedStateProj::Error => {
                 Poll::Ready(Ok(
                     (StatusCode::FORBIDDEN, "What are you hiding?").into_response()

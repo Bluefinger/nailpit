@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use nailconfig::NailConfig;
-use rand::{RngCore, Rng};
+use rand::{Rng, RngCore};
 use tokio::time::sleep;
 
 /// Apply a delay/sleep based from provided configuration. Either it provides a set

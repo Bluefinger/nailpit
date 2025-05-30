@@ -32,7 +32,6 @@ pub struct MarkovGen {
 }
 
 impl MarkovGen {
-    #[fastrace::trace]
     pub fn new(input: impl AsRef<Path>) -> Result<Self> {
         let file = std::fs::read_to_string(input.as_ref())?;
 
@@ -45,6 +44,7 @@ impl MarkovGen {
         Ok(Self { chain })
     }
 
+    #[fastrace::trace]
     fn generate(chain: &NailKov, config: &NailConfig, rng: &mut impl RngCore) -> Bytes {
         // Allocate more than we need, as we might generate more tokens than our 4kB threshold
         let mut buffer = BytesMut::with_capacity(config.generator.chunk_size * 2);
@@ -142,7 +142,7 @@ impl MarkovGen {
 
             if size_limit != 0 && bytes_written >= size_limit {
                 log::info!(
-                    "Size limit was reached ({:.2} MB in {}us",
+                    "Size limit was reached ({:.2} MB in {}us)",
                     (bytes_written as f64) * 1e-6,
                     start_time.elapsed().as_micros()
                 );
@@ -161,7 +161,7 @@ impl MarkovGen {
 
         tokio::spawn(
             self.spawn_generator(path, config, tx)
-                .in_span(Span::enter_with_local_parent("Markov Generator")),
+                .in_span(Span::enter_with_local_parent("MarkovGen")),
         );
 
         ReceiverStream::new(rx)

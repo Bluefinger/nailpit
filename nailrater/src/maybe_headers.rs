@@ -1,6 +1,6 @@
 use std::net::IpAddr;
 
-use hyper::{header::FORWARDED, HeaderMap};
+use hyper::{HeaderMap, header::FORWARDED};
 use nailfv::{Parser, extract_for};
 
 const X_REAL_IP: &str = "x-real-ip";

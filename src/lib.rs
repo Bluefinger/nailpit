@@ -5,6 +5,7 @@ use axum::http::HeaderValue;
 use hyper::{HeaderMap, header::CONTENT_TYPE};
 
 pub mod inputs;
+pub mod otel;
 pub mod routes;
 pub mod shutdown;
 pub mod state;

@@ -17,6 +17,7 @@ nailrng = { path = "../nailrng" }
 parking_lot.workspace = true
 color-eyre.workspace = true
 fastrace.workspace = true
+fastrace-futures.workspace = true
 rand.workspace = true
 bytes.workspace = true
 log.workspace = true

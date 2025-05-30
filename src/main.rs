@@ -3,8 +3,7 @@ use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use color_eyre::Result;
 use futures_concurrency::future::TryJoin;
-use logforth::append;
-use logforth::filter::EnvFilter;
+use logforth::{append, filter::EnvFilter};
 use mimalloc_safe::MiMalloc;
 
 #[global_allocator]
@@ -35,6 +34,22 @@ async fn nailpit_main(
     config: Arc<nailconfig::NailConfig>,
     inputs: Arc<[nailgen::MarkovGen]>,
 ) -> Result<()> {
+    logforth::builder()
+        .dispatch(|d| {
+            d.filter(EnvFilter::from_default_env())
+                .diagnostic(logforth::diagnostic::FastraceDiagnostic::default())
+                .append(logforth::append::FastraceEvent::default())
+                .append(nailpit::otel::init_logging_reporter())
+                .append(append::Stderr::default())
+        })
+        .apply();
+
+    #[cfg(feature = "tracing")]
+    nailpit::otel::init_tracing_reporter();
+
+    log::info!("Welcome to Nailpit!");
+    log::info!("Loaded config: {config:?}");
+
     let (shutdown_notifier, shutdown_signal) = tokio::sync::watch::channel(());
     let shutdown_notifier = Arc::new(shutdown_notifier);
     let state = nailpit::state::ServerState::new(config, inputs);
@@ -55,25 +70,7 @@ async fn nailpit_main(
 fn main() -> Result<()> {
     color_eyre::install()?;
 
-    logforth::builder()
-        .dispatch(|d| {
-            d.filter(EnvFilter::from_default_env())
-                .diagnostic(logforth::diagnostic::FastraceDiagnostic::default())
-                .append(logforth::append::FastraceEvent::default())
-                .append(append::Stderr::default())
-        })
-        .apply();
-
-    fastrace::set_reporter(
-        fastrace::collector::ConsoleReporter,
-        fastrace::collector::Config::default(),
-    );
-
-    log::info!("Welcome to Nailpit!");
-
     let config: nailconfig::NailConfig = nailconfig::get_configuration()?;
-
-    log::info!("Loaded config: {config:?}");
 
     let inputs = nailpit::inputs::get_input_files(&config)?;
 
@@ -94,8 +91,6 @@ fn main() -> Result<()> {
     rt.shutdown_timeout(Duration::from_secs(60));
 
     log::info!("Everything shutdown gracefully. Good night :)");
-
-    fastrace::flush();
 
     Ok(())
 }

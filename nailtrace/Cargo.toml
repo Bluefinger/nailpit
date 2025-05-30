@@ -1,0 +1,18 @@
+[package]
+name = "nailtrace"
+authors.workspace = true
+edition.workspace = true
+repository.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+fastrace.workspace = true
+hyper.workspace = true
+tower.workspace = true
+tower-http.workspace = true
+uuid = { version = "1.17.0", features = ["v4", "fast-rng"] }
+
+[lints]
+workspace = true

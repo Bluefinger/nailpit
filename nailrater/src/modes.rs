@@ -35,7 +35,9 @@ impl LimitModes {
             } if (soft_limit..hard_limit).contains(visits) => {
                 PeerState::Delay(Duration::from_millis(delay))
             }
-            LimitModes::SoftHard { hard_limit, .. } if (hard_limit..).contains(visits) => PeerState::Drop,
+            LimitModes::SoftHard { hard_limit, .. } if (hard_limit..).contains(visits) => {
+                PeerState::Drop
+            }
             _ => PeerState::Ready,
         }
     }

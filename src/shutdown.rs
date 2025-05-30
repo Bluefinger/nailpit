@@ -7,7 +7,6 @@ use tokio::{
     sync::watch::{Receiver, Sender},
 };
 
-#[fastrace::trace]
 pub async fn shutdown_task(notifier: Receiver<()>) -> Result<()> {
     log::info!("Listening for shutdown signals");
 
