@@ -116,9 +116,9 @@ futures-lite.workspace = true
 mimalloc-safe = { version = "0.1.50", optional = true }
 pin-project-lite.workspace = true
 fastrace-opentelemetry = "0.10.0"
-opentelemetry = { version = "0.29.1", default-features = false, features = ["trace", "logs", "metrics"] }
-opentelemetry-otlp = { version = "0.29.0", default-features = false, features = ["trace", "logs", "metrics", "grpc-tonic", "zstd-tonic"] }
-opentelemetry_sdk = { version = "0.29.0", default-features = false, features = ["trace", "logs", "metrics"] }
+opentelemetry = { version = "0.29.1", default-features = false, features = ["trace", "logs"] }
+opentelemetry-otlp = { version = "0.29.0", default-features = false, features = ["trace", "logs", "grpc-tonic", "zstd-tonic"] }
+opentelemetry_sdk = { version = "0.29.0", default-features = false, features = ["trace", "logs"] }
 
 [profile.release]
 codegen-units = 1
