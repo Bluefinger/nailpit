@@ -18,3 +18,9 @@ chunk_size = 4096
 type = "soft_limit"
 soft_limit = 200
 soft_delay = 600
+
+[open_telemetry]
+endpoint = "http://127.0.0.1:4317"
+service_name = "nailpit"
+logs = false
+traces = false
