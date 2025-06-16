@@ -1,5 +1,5 @@
 [package]
-name = "nailrater"
+name = "nailip"
 authors.workspace = true
 edition.workspace = true
 repository.workspace = true
@@ -10,7 +10,6 @@ rust-version.workspace = true
 [dependencies]
 nailfv = { path = "../nailfv" }
 nailconfig = { path = "../nailconfig" }
-nailip = { path = "../nailip" }
 axum.workspace = true
 futures-lite.workspace = true
 hyper.workspace = true
@@ -19,6 +18,7 @@ scc.workspace = true
 tokio.workspace = true
 wyrand.workspace = true
 tower.workspace = true
+log.workspace = true
 
 [lints]
 workspace = true

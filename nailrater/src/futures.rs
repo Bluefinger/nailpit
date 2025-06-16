@@ -105,11 +105,11 @@ where
             NailedStateProj::Dropped => Poll::Ready(Ok(
                 (StatusCode::TOO_MANY_REQUESTS, "Go away").into_response()
             )),
-            NailedStateProj::Error => {
-                Poll::Ready(Ok(
-                    (StatusCode::FORBIDDEN, "What are you hiding?").into_response()
-                ))
-            }
+            NailedStateProj::Error => Poll::Ready(Ok((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Something is broken here",
+            )
+                .into_response())),
         }
     }
 }
