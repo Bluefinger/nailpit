@@ -9,7 +9,7 @@ use std::borrow::Cow;
 
 pub fn init_logging_reporter(config: &NailConfig) -> logforth::append::OpentelemetryLog {
     let log_exporter = LogExporter::builder()
-        .with_http()
+        .with_tonic()
         .with_endpoint(&config.open_telemetry.endpoint)
         .build()
         .unwrap();
@@ -17,7 +17,7 @@ pub fn init_logging_reporter(config: &NailConfig) -> logforth::append::Opentelem
     let builder =
         OpentelemetryLogBuilder::new(config.open_telemetry.service_name.to_owned(), log_exporter);
 
-    builder.build().unwrap()
+    builder.build()
 }
 
 pub fn init_tracing_reporter(config: &NailConfig) {

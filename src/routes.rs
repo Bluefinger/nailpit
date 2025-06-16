@@ -2,6 +2,7 @@ use axum::{Router, extract::NestedPath, response::Html, routing::get};
 use fastrace::Span;
 use fastrace_futures::StreamExt;
 use hyper::StatusCode;
+use nailip::identify_peer;
 use nailrater::NailRaterLayer;
 use nailstream::NailStream;
 use nailtrace::NailTraceLayer;
@@ -37,6 +38,7 @@ pub fn nail_app(state: ServerState) -> Router {
         .layer(
             ServiceBuilder::new()
                 .set_x_request_id(MakeRequestUuid)
+                .layer(axum::middleware::from_fn(identify_peer))
                 .layer(NailTraceLayer)
                 .layer(NormalizePathLayer::trim_trailing_slash())
                 .layer(CompressionLayer::new().quality(CompressionLevel::Default))

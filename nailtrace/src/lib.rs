@@ -4,6 +4,7 @@ use std::task::Poll;
 use fastrace::prelude::*;
 use hyper::Request;
 use hyper::header::USER_AGENT;
+use nailip::IdentifiedPeer;
 use tower::{Layer, Service};
 use tower_http::request_id::RequestId;
 
@@ -61,7 +62,13 @@ where
             .and_then(|traceparent| SpanContext::decode_w3c_traceparent(traceparent.to_str().ok()?))
             .unwrap_or_else(SpanContext::random);
 
-        let root = Span::root(req.uri().to_string(), parent).with_properties(|| {
+        let root_name = if req.uri() == "/" {
+            String::from("Index")
+        } else {
+            String::from("Garbage")
+        };
+
+        let root = Span::root(root_name, parent).with_properties(|| {
             [
                 (
                     "request.id",
@@ -70,12 +77,17 @@ where
                         .and_then(|header| header.header_value().to_str().ok())
                         .map_or_else(|| uuid::Uuid::new_v4().to_string(), ToString::to_string),
                 ),
+                ("request.uri", req.uri().to_string()),
                 (
                     "user.agent",
                     headers
                         .get(USER_AGENT)
                         .and_then(|header| header.to_str().ok())
                         .map_or_else(|| "None".to_string(), ToString::to_string),
+                ),
+                (
+                    "user.ip",
+                    extensions.get::<IdentifiedPeer>().unwrap().to_string(),
                 ),
             ]
         });

@@ -1,24 +1,19 @@
 mod futures;
-mod maybe_headers;
 mod modes;
 
 use std::{
-    net::{IpAddr, SocketAddr},
+    net::IpAddr,
     sync::Arc,
     time::{Duration, Instant},
 };
 
-use axum::{
-    body::Body,
-    extract::{ConnectInfo, Request},
-    response::Response,
-};
+use axum::{body::Body, extract::Request, response::Response};
 use futures::NailedResponseFuture;
 use futures_lite::{FutureExt, future::Boxed};
-use hyper::HeaderMap;
-use maybe_headers::{maybe_forwarded, maybe_x_forwarded_for, maybe_x_real_ip};
+
 use modes::LimitModes;
 use nailconfig::RateLimitingConfig;
+use nailip::IdentifiedPeer;
 use scc::HashMap;
 use tokio::time::sleep;
 use wyrand::RandomWyHashState;
@@ -77,16 +72,6 @@ impl<S> NailRater<S> {
         }
     }
 
-    fn extract(
-        headers: &HeaderMap,
-        connection: Option<&ConnectInfo<SocketAddr>>,
-    ) -> Option<IpAddr> {
-        maybe_x_forwarded_for(headers)
-            .or_else(|| maybe_x_real_ip(headers))
-            .or_else(|| maybe_forwarded(headers))
-            .or_else(|| connection.map(|connect_info| connect_info.ip()))
-    }
-
     fn track_visiting_peer(&self, proxied: IpAddr) -> PeerState {
         self.peers
             .entry(proxied)
@@ -140,14 +125,11 @@ where
     }
 
     fn call(&mut self, req: Request<ReqBody>) -> Self::Future {
-        let Some(proxied) = Self::extract(
-            req.headers(),
-            req.extensions().get::<ConnectInfo<SocketAddr>>(),
-        ) else {
+        let Some(proxied) = req.extensions().get::<IdentifiedPeer>() else {
             return NailedResponseFuture::error();
         };
 
-        let peer = self.track_visiting_peer(proxied);
+        let peer = self.track_visiting_peer(proxied.ip());
 
         let delay = match peer {
             PeerState::Ready => None,

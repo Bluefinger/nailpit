@@ -8,6 +8,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+nailip = { path = "../nailip" }
 fastrace.workspace = true
 hyper.workspace = true
 tower.workspace = true
