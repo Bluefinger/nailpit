@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["nailconfig", "nailfv", "nailgen", "nailip", "nailkov", "nailrater", "nailrng", "nailstream", "nailtrace"]
+members = ["crates/*"]
 
 [workspace.package]
 authors = ["Gonçalo Rica Pais da Silva <bluefinger@gmail.com>"]
@@ -84,14 +84,14 @@ tracing = ["fastrace/enable"]
 mimalloc = ["dep:mimalloc-safe"]
 
 [dependencies]
-nailkov = { path = "nailkov" }
-nailrng = { path = "nailrng" }
-nailconfig = { path = "nailconfig" }
-nailstream = { path = "nailstream" }
-nailgen = { path = "nailgen" }
-nailrater = { path = "nailrater" }
-nailtrace = { path = "nailtrace" }
-nailip = { path = "nailip" }
+nailkov = { path = "crates/nailkov" }
+nailrng = { path = "crates/nailrng" }
+nailconfig = { path = "crates/nailconfig" }
+nailstream = { path = "crates/nailstream" }
+nailgen = { path = "crates/nailgen" }
+nailrater = { path = "crates/nailrater" }
+nailtrace = { path = "crates/nailtrace" }
+nailip = { path = "crates/nailip" }
 axum.workspace = true
 axum-core.workspace = true
 hyper.workspace = true
