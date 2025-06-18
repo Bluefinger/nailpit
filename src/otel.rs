@@ -31,7 +31,7 @@ pub fn init_tracing_reporter(config: &NailConfig) {
             .with_compression(opentelemetry_otlp::Compression::Zstd)
             .build()
             .expect("initialize oltp exporter"),
-        SpanKind::Server,
+        SpanKind::Internal,
         Cow::Owned(
             Resource::builder()
                 .with_service_name(config.open_telemetry.service_name.to_owned())
