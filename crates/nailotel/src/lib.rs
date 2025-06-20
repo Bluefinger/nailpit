@@ -21,7 +21,6 @@ pub fn init_logging_reporter(config: &NailConfig) -> logforth::append::Opentelem
 }
 
 pub fn init_tracing_reporter(config: &NailConfig) {
-    // Initialize reporter
     let reporter = OpenTelemetryReporter::new(
         SpanExporter::builder()
             .with_tonic()

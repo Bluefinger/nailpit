@@ -4,12 +4,12 @@ use std::{net::SocketAddr, sync::Arc, time::Duration};
 use color_eyre::Result;
 use futures_concurrency::future::TryJoin;
 use logforth::{append, filter::EnvFilter};
-use mimalloc_safe::MiMalloc;
 
+#[cfg(feature = "mimalloc")]
 #[global_allocator]
-static GLOBAL: MiMalloc = MiMalloc;
+static GLOBAL: mimalloc_safe::MiMalloc = mimalloc_safe::MiMalloc;
 
-async fn spawn_axum_server<F>(state: nailpit::state::ServerState, shutdown: F) -> Result<()>
+async fn spawn_axum_server<F>(state: nailstate::ServerState, shutdown: F) -> Result<()>
 where
     F: Future<Output = ()> + Send + 'static,
 {
@@ -20,7 +20,8 @@ where
     tokio::spawn(
         axum::serve(
             listener,
-            nailpit::routes::nail_app(state).into_make_service_with_connect_info::<SocketAddr>(),
+            nailroutes::nail_app(nailroutes::nail_route(state.clone()), state)
+                .into_make_service_with_connect_info::<SocketAddr>(),
         )
         .with_graceful_shutdown(shutdown)
         .into_future(),
@@ -41,7 +42,7 @@ async fn nailpit_main(
             if config.open_telemetry.logs {
                 d.diagnostic(logforth::diagnostic::FastraceDiagnostic::default())
                     .append(logforth::append::FastraceEvent::default())
-                    .append(nailpit::otel::init_logging_reporter(config.as_ref()))
+                    .append(nailotel::init_logging_reporter(config.as_ref()))
                     .append(append::Stderr::default())
             } else {
                 d.append(append::Stderr::default())
@@ -51,7 +52,7 @@ async fn nailpit_main(
 
     #[cfg(feature = "tracing")]
     if config.open_telemetry.traces {
-        nailpit::otel::init_tracing_reporter(config.as_ref());
+        nailotel::init_tracing_reporter(config.as_ref());
     }
 
     log::info!("Welcome to Nailpit!");
@@ -59,7 +60,7 @@ async fn nailpit_main(
 
     let (shutdown_notifier, shutdown_signal) = tokio::sync::watch::channel(());
     let shutdown_notifier = Arc::new(shutdown_notifier);
-    let state = nailpit::state::ServerState::new(config, inputs);
+    let state = nailstate::ServerState::new(config, inputs);
 
     (
         spawn_axum_server(
