@@ -50,9 +50,9 @@ impl hyper::body::Body for NailStream {
 
 impl IntoResponse for NailStream {
     fn into_response(mut self) -> Response<Body> {
-        let headers = self.headers.take().unwrap_or_default();
+        let mut headers = self.headers.take().unwrap_or_default();
         let mut response: Response<Body> = Response::new(Body::new(self));
-        *response.headers_mut() = headers;
+        response.headers_mut().extend(headers.drain());
         response
     }
 }

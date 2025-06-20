@@ -1,5 +1,5 @@
 [package]
-name = "nailtrace"
+name = "nailstate"
 authors.workspace = true
 edition.workspace = true
 repository.workspace = true
@@ -8,12 +8,12 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-nailip = { path = "../nailip" }
+nailrng = { path = "../nailrng" }
+nailconfig = { path = "../nailconfig" }
+nailgen = { path = "../nailgen" }
 axum.workspace = true
 fastrace.workspace = true
-hyper.workspace = true
-tower-http.workspace = true
-uuid = { version = "1.17.0", features = ["v4", "fast-rng"] }
+rand.workspace = true
 
 [lints]
 workspace = true
