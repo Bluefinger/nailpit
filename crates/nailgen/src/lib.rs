@@ -150,7 +150,12 @@ impl MarkovGen {
             }
         }
 
-        let final_str = footer(path.as_str(), config.generator.max_pit_links, &mut rng);
+        let final_str = footer(
+            path.as_str(),
+            &config.generator.prompts,
+            config.generator.max_pit_links,
+            &mut rng,
+        );
 
         tx.send(final_str).await.ok();
     }

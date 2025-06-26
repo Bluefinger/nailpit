@@ -17,7 +17,12 @@ pub fn init_logging_reporter(config: &NailConfig) -> logforth::append::Opentelem
     let builder =
         OpentelemetryLogBuilder::new(config.open_telemetry.service_name.to_owned(), log_exporter);
 
-    builder.build()
+    builder
+        .label(
+            "service.name",
+            config.open_telemetry.service_name.to_owned(),
+        )
+        .build()
 }
 
 pub fn init_tracing_reporter(config: &NailConfig) {
