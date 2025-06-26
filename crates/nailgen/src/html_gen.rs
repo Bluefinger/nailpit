@@ -3,7 +3,7 @@ use std::iter::once;
 use bytes::{Bytes, BytesMut};
 use nailconfig::NailConfig;
 use nailkov::{NailKov, interner::Interner};
-use rand::{Rng, RngCore, distr::Alphanumeric};
+use rand::{Rng, RngCore, distr::Alphanumeric, seq::IndexedRandom};
 use std::iter::repeat_with;
 
 use crate::INTERNER;
@@ -107,9 +107,20 @@ pub fn links(route: &str, max_links: usize, rng: &mut impl RngCore) -> Bytes {
     Bytes::from(nav)
 }
 
-pub fn footer(route: &str, max_links: usize, rng: &mut impl RngCore) -> Bytes {
-    let mut footer = BytesMut::from("</article></main>\n<footer>");
+pub fn footer(route: &str, prompts: &[String], max_links: usize, rng: &mut impl RngCore) -> Bytes {
+    let mut footer = BytesMut::new();
 
+    if let Some(prompt) = match prompts.len() {
+        0 => None,
+        1 => prompts.get(1),
+        _ => prompts.choose(rng),
+    } {
+        footer.extend(b"<p>");
+        footer.extend(prompt.as_bytes());
+        footer.extend(b"</p>");
+    }
+
+    footer.extend(b"</article></main>\n<footer>");
     footer.extend(links(route, max_links, rng));
     footer.extend(b"</footer>\n</body>\n</html>");
 

@@ -3,6 +3,8 @@
 //! from either `toml` files or environment variables, with the format
 //! `PIT__GENERATOR__TIMEOUT` as an example.
 
+use std::ops::Deref;
+
 use color_eyre::Result;
 use serde_aux::field_attributes::{
     deserialize_bool_from_anything, deserialize_number_from_string,
@@ -21,8 +23,27 @@ pub struct NailConfig {
     pub open_telemetry: OpenTelemetryConfig,
 }
 
+#[derive(Default, serde::Deserialize)]
+pub struct PromptsList(Vec<String>);
+
+impl std::fmt::Debug for PromptsList {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("PromptsList").finish_non_exhaustive()
+    }
+}
+
+impl Deref for PromptsList {
+    type Target = [String];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 #[derive(Debug, serde::Deserialize)]
 pub struct GeneratorConfig {
+    #[serde(default)]
+    pub prompts: PromptsList,
     pub input_files: String,
     #[serde(deserialize_with = "deserialize_number_from_string")]
     pub min_paragraph_size: usize,
