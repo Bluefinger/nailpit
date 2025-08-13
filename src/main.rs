@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 
+use axum::body::Bytes;
 use color_eyre::Result;
 use futures_concurrency::future::TryJoin;
 use logforth::{append, filter::EnvFilter};
@@ -9,7 +10,11 @@ use logforth::{append, filter::EnvFilter};
 #[global_allocator]
 static GLOBAL: mimalloc_safe::MiMalloc = mimalloc_safe::MiMalloc;
 
-async fn spawn_axum_server<F>(state: nailstate::ServerState, shutdown: F) -> Result<()>
+async fn spawn_axum_server<F>(
+    state: nailstate::ServerState,
+    spicy: Option<Bytes>,
+    shutdown: F,
+) -> Result<()>
 where
     F: Future<Output = ()> + Send + 'static,
 {
@@ -20,7 +25,7 @@ where
     tokio::spawn(
         axum::serve(
             listener,
-            nailroutes::nail_app(nailroutes::nail_route(state.clone()), state)
+            nailroutes::nail_app(nailroutes::nail_route(state.clone()), state, spicy)
                 .into_make_service_with_connect_info::<SocketAddr>(),
         )
         .with_graceful_shutdown(shutdown)
@@ -34,6 +39,7 @@ where
 async fn nailpit_main(
     config: Arc<nailconfig::NailConfig>,
     inputs: Arc<[nailgen::MarkovGen]>,
+    spicy: Option<Bytes>,
 ) -> Result<()> {
     logforth::builder()
         .dispatch(|d| {
@@ -65,6 +71,7 @@ async fn nailpit_main(
     (
         spawn_axum_server(
             state,
+            spicy,
             nailpit::shutdown::wait_for_shutdown(shutdown_notifier),
         ),
         nailpit::shutdown::shutdown_task(shutdown_signal),
@@ -82,6 +89,8 @@ fn main() -> Result<()> {
 
     let inputs = nailpit::inputs::get_input_files(&config)?;
 
+    let spicy = nailpit::inputs::get_spicy_payload(&config)?;
+
     let rt = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(
             std::thread::available_parallelism()?
@@ -91,7 +100,7 @@ fn main() -> Result<()> {
         .enable_all()
         .build()?;
 
-    rt.block_on(nailpit_main(Arc::new(config), inputs))?;
+    rt.block_on(nailpit_main(Arc::new(config), inputs, spicy))?;
 
     log::info!("Waiting for background tasks to complete...");
 

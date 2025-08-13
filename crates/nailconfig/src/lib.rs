@@ -66,6 +66,22 @@ pub struct GeneratorConfig {
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, serde::Deserialize)]
+#[serde(tag = "mode")]
+pub enum DropBehavior {
+    #[default]
+    #[serde(rename = "normal")]
+    Normal,
+    #[serde(rename = "spicy")]
+    Spicy { payload: String },
+}
+
+impl DropBehavior {
+    pub fn is_spicy(&self) -> bool {
+        matches!(self, Self::Spicy { .. })
+    }
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq, serde::Deserialize)]
 #[serde(tag = "type")]
 pub enum RateLimitingConfig {
     #[default]
@@ -82,6 +98,8 @@ pub enum RateLimitingConfig {
     HardLimit {
         #[serde(deserialize_with = "deserialize_number_from_string")]
         hard_limit: u64,
+        #[serde(default)]
+        drop_behavior: DropBehavior,
     },
     #[serde(rename = "soft_with_hard_limit")]
     SoftWithHardLimit {
@@ -91,6 +109,8 @@ pub enum RateLimitingConfig {
         hard_limit: u64,
         #[serde(deserialize_with = "deserialize_number_from_string")]
         soft_delay: u64,
+        #[serde(default)]
+        drop_behavior: DropBehavior,
     },
 }
 

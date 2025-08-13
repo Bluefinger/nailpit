@@ -7,10 +7,15 @@ use std::{
     time::{Duration, Instant},
 };
 
-use axum::{body::Body, extract::Request, response::Response};
+use axum::{
+    body::{Body, Bytes},
+    extract::Request,
+    response::Response,
+};
 use futures::NailedResponseFuture;
 use futures_lite::{FutureExt, future::Boxed};
 
+use hyper::{HeaderMap, header::ACCEPT_ENCODING};
 use modes::LimitModes;
 use nailconfig::RateLimitingConfig;
 use nailip::IdentifiedPeer;
@@ -26,6 +31,7 @@ enum PeerState {
     Ready,
     Delay(Duration),
     Drop,
+    SpicyDrop,
 }
 
 #[derive(Debug, Clone)]
@@ -33,16 +39,21 @@ struct Peer {
     count: u64,
     state: PeerState,
     last_seen: Instant,
+    supports_spicy: bool,
 }
 
 #[derive(Debug, Clone)]
 pub struct NailRaterLayer {
     config: RateLimitingConfig,
+    spicy_payload: Option<Bytes>,
 }
 
 impl NailRaterLayer {
-    pub fn new(config: RateLimitingConfig) -> Self {
-        Self { config }
+    pub fn new(config: RateLimitingConfig, spicy_payload: Option<Bytes>) -> Self {
+        Self {
+            config,
+            spicy_payload,
+        }
     }
 }
 
@@ -50,7 +61,7 @@ impl<S> tower::Layer<S> for NailRaterLayer {
     type Service = NailRater<S>;
 
     fn layer(&self, inner: S) -> Self::Service {
-        NailRater::new(&self.config, inner)
+        NailRater::new(&self.config, self.spicy_payload.clone(), inner)
     }
 }
 
@@ -59,33 +70,45 @@ pub struct NailRater<S> {
     peers: Arc<HashMap<IpAddr, Peer, RandomWyHashState>>,
     mode: LimitModes,
     schedule_pruning: Option<Instant>,
+    spicy_payload: Option<Bytes>,
     inner: S,
 }
 
 impl<S> NailRater<S> {
-    pub fn new(mode: impl Into<LimitModes>, inner: S) -> Self {
+    pub fn new(mode: impl Into<LimitModes>, spicy_payload: Option<Bytes>, inner: S) -> Self {
         Self {
             peers: Default::default(),
             mode: mode.into(),
             schedule_pruning: None,
+            spicy_payload,
             inner,
         }
     }
 
-    fn track_visiting_peer(&self, proxied: IpAddr) -> PeerState {
-        self.peers
+    fn track_visiting_peer(&self, proxied: IpAddr, headers: &HeaderMap) -> (PeerState, bool) {
+        let peer = self
+            .peers
             .entry(proxied)
             .and_modify(|p| {
                 p.count += 1;
                 p.last_seen = Instant::now();
                 p.state = self.mode.limit(&p.count);
             })
-            .or_insert_with(|| Peer {
-                count: 1,
-                state: self.mode.limit(&1),
-                last_seen: Instant::now(),
-            })
-            .state
+            .or_insert_with(|| {
+                let supports_spicy = headers
+                    .get(ACCEPT_ENCODING)
+                    .and_then(|header| header.to_str().ok())
+                    .is_some_and(|header| header.contains("br"));
+
+                Peer {
+                    count: 1,
+                    state: self.mode.limit(&1),
+                    last_seen: Instant::now(),
+                    supports_spicy,
+                }
+            });
+
+        (peer.state, peer.supports_spicy)
     }
 
     fn prune(peers: Arc<HashMap<IpAddr, Peer, RandomWyHashState>>) -> Boxed<()> {
@@ -129,12 +152,19 @@ where
             return NailedResponseFuture::error();
         };
 
-        let peer = self.track_visiting_peer(proxied.ip());
+        let (peer_state, supports_spicy) = self.track_visiting_peer(proxied.ip(), req.headers());
 
-        let delay = match peer {
+        let delay = match peer_state {
             PeerState::Ready => None,
             PeerState::Delay(delay) => Some(Box::pin(sleep(delay))),
-            PeerState::Drop => return NailedResponseFuture::dropped(),
+            PeerState::SpicyDrop if supports_spicy => {
+                return self
+                    .spicy_payload
+                    .as_ref()
+                    .cloned()
+                    .map_or_else(NailedResponseFuture::dropped, NailedResponseFuture::spicy);
+            }
+            _ => return NailedResponseFuture::dropped(),
         };
 
         let prune = self.prune_recorded_peers();

@@ -4,11 +4,15 @@ use std::{
 };
 
 use axum::{
-    body::Body,
+    body::{Body, Bytes},
+    http::HeaderValue,
     response::{IntoResponse, Response},
 };
 use futures_lite::{future::Boxed, ready};
-use hyper::StatusCode;
+use hyper::{
+    StatusCode,
+    header::{CONTENT_ENCODING, CONTENT_TYPE},
+};
 use pin_project_lite::pin_project;
 use tokio::time::Sleep;
 
@@ -27,6 +31,9 @@ pin_project! {
             state: NailedNormalFuture<T>,
         },
         Dropped,
+        Spicy {
+            payload: Bytes,
+        },
         Error,
     }
 }
@@ -60,6 +67,12 @@ impl<T> NailedResponseFuture<T> {
     pub fn dropped() -> Self {
         Self {
             state: NailedState::Dropped,
+        }
+    }
+
+    pub fn spicy(payload: Bytes) -> Self {
+        Self {
+            state: NailedState::Spicy { payload },
         }
     }
 
@@ -105,6 +118,19 @@ where
             NailedStateProj::Dropped => Poll::Ready(Ok(
                 (StatusCode::TOO_MANY_REQUESTS, "Go away").into_response()
             )),
+            NailedStateProj::Spicy { payload } => {
+                let mut response = (StatusCode::TOO_MANY_REQUESTS, payload.clone()).into_response();
+
+                let headers = response.headers_mut();
+
+                headers.insert(
+                    CONTENT_TYPE,
+                    HeaderValue::from_static("text/html; charset=utf-8"),
+                );
+                headers.insert(CONTENT_ENCODING, HeaderValue::from_static("br"));
+
+                Poll::Ready(Ok(response))
+            }
             NailedStateProj::Error => Poll::Ready(Ok((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Something is broken here",

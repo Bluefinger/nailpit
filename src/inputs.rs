@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
+use axum::body::Bytes;
 use glob::glob;
-use nailconfig::NailConfig;
+use nailconfig::{DropBehavior, NailConfig, RateLimitingConfig};
 use nailgen::MarkovGen;
 
 /// Takes a glob for finding all input files and returns a read-only list of
@@ -21,4 +22,22 @@ pub fn get_input_files(config: &NailConfig) -> color_eyre::Result<Arc<[MarkovGen
     }
 
     Ok(inputs)
+}
+
+pub fn get_spicy_payload(config: &NailConfig) -> color_eyre::Result<Option<Bytes>> {
+    match &config.rate_limiting {
+        RateLimitingConfig::HardLimit {
+            drop_behavior: DropBehavior::Spicy { payload },
+            ..
+        }
+        | RateLimitingConfig::SoftWithHardLimit {
+            drop_behavior: DropBehavior::Spicy { payload },
+            ..
+        } => {
+            let spicy = std::fs::read(payload)?;
+
+            Ok(Some(Bytes::from(spicy)))
+        }
+        _ => Ok(None),
+    }
 }
