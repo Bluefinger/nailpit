@@ -1,7 +1,6 @@
 #![forbid(unsafe_code)]
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 
-use axum::body::Bytes;
 use color_eyre::Result;
 use futures_concurrency::future::TryJoin;
 use logforth::{append, filter::EnvFilter};
@@ -12,7 +11,7 @@ static GLOBAL: mimalloc_safe::MiMalloc = mimalloc_safe::MiMalloc;
 
 async fn spawn_axum_server<F>(
     state: nailstate::ServerState,
-    spicy: Option<Bytes>,
+    spicy: Option<nailspicy::SpicyPayloads>,
     shutdown: F,
 ) -> Result<()>
 where
@@ -39,7 +38,7 @@ where
 async fn nailpit_main(
     config: Arc<nailconfig::NailConfig>,
     inputs: Arc<[nailgen::MarkovGen]>,
-    spicy: Option<Bytes>,
+    spicy: Option<nailspicy::SpicyPayloads>,
 ) -> Result<()> {
     logforth::builder()
         .dispatch(|d| {
@@ -89,7 +88,7 @@ fn main() -> Result<()> {
 
     let inputs = nailpit::inputs::get_input_files(&config)?;
 
-    let spicy = nailpit::inputs::get_spicy_payload(&config)?;
+    let spicy = nailspicy::get_spicy_payload(&config);
 
     let rt = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(

@@ -1173,6 +1173,7 @@ dependencies = [
  "nailrater",
  "nailrng",
  "nailroutes",
+ "nailspicy",
  "nailstate",
  "nailstream",
  "nailtrace",
@@ -1189,6 +1190,7 @@ dependencies = [
  "nailconfig",
  "nailfv",
  "nailip",
+ "nailspicy",
  "pin-project-lite",
  "scc",
  "tokio",
@@ -1215,11 +1217,23 @@ dependencies = [
  "hyper",
  "nailip",
  "nailrater",
+ "nailspicy",
  "nailstate",
  "nailstream",
  "nailtrace",
  "tower",
  "tower-http",
+]
+
+[[package]]
+name = "nailspicy"
+version = "0.1.0"
+dependencies = [
+ "hyper",
+ "log",
+ "nailconfig",
+ "scc",
+ "wyrand",
 ]
 
 [[package]]

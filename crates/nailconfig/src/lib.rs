@@ -72,7 +72,7 @@ pub enum DropBehavior {
     #[serde(rename = "normal")]
     Normal,
     #[serde(rename = "spicy")]
-    Spicy { payload: String },
+    Spicy { payload: Vec<String> },
 }
 
 impl DropBehavior {

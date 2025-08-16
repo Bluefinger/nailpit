@@ -7,19 +7,16 @@ use std::{
     time::{Duration, Instant},
 };
 
-use axum::{
-    body::{Body, Bytes},
-    extract::Request,
-    response::Response,
-};
+use axum::{body::Body, extract::Request, response::Response};
 use futures::NailedResponseFuture;
 use futures_lite::{FutureExt, future::Boxed};
 
-use hyper::{HeaderMap, header::ACCEPT_ENCODING};
+use hyper::HeaderMap;
 use modes::LimitModes;
 use nailconfig::RateLimitingConfig;
 use nailip::IdentifiedPeer;
-use scc::HashMap;
+use nailspicy::{SpicyPayloadKind, SpicyPayloads};
+use scc::{HashMap, ebr::Guard};
 use tokio::time::sleep;
 use wyrand::RandomWyHashState;
 
@@ -39,17 +36,17 @@ struct Peer {
     count: u64,
     state: PeerState,
     last_seen: Instant,
-    supports_spicy: bool,
+    supports_spicy: Option<SpicyPayloadKind>,
 }
 
 #[derive(Debug, Clone)]
 pub struct NailRaterLayer {
     config: RateLimitingConfig,
-    spicy_payload: Option<Bytes>,
+    spicy_payload: Option<Arc<SpicyPayloads>>,
 }
 
 impl NailRaterLayer {
-    pub fn new(config: RateLimitingConfig, spicy_payload: Option<Bytes>) -> Self {
+    pub fn new(config: RateLimitingConfig, spicy_payload: Option<Arc<SpicyPayloads>>) -> Self {
         Self {
             config,
             spicy_payload,
@@ -70,12 +67,16 @@ pub struct NailRater<S> {
     peers: Arc<HashMap<IpAddr, Peer, RandomWyHashState>>,
     mode: LimitModes,
     schedule_pruning: Option<Instant>,
-    spicy_payload: Option<Bytes>,
+    spicy_payload: Option<Arc<SpicyPayloads>>,
     inner: S,
 }
 
 impl<S> NailRater<S> {
-    pub fn new(mode: impl Into<LimitModes>, spicy_payload: Option<Bytes>, inner: S) -> Self {
+    pub fn new(
+        mode: impl Into<LimitModes>,
+        spicy_payload: Option<Arc<SpicyPayloads>>,
+        inner: S,
+    ) -> Self {
         Self {
             peers: Default::default(),
             mode: mode.into(),
@@ -85,7 +86,11 @@ impl<S> NailRater<S> {
         }
     }
 
-    fn track_visiting_peer(&self, proxied: IpAddr, headers: &HeaderMap) -> (PeerState, bool) {
+    fn track_visiting_peer(
+        &self,
+        proxied: IpAddr,
+        headers: &HeaderMap,
+    ) -> (PeerState, Option<SpicyPayloadKind>) {
         let peer = self
             .peers
             .entry(proxied)
@@ -94,18 +99,11 @@ impl<S> NailRater<S> {
                 p.last_seen = Instant::now();
                 p.state = self.mode.limit(&p.count);
             })
-            .or_insert_with(|| {
-                let supports_spicy = headers
-                    .get(ACCEPT_ENCODING)
-                    .and_then(|header| header.to_str().ok())
-                    .is_some_and(|header| header.contains("br"));
-
-                Peer {
-                    count: 1,
-                    state: self.mode.limit(&1),
-                    last_seen: Instant::now(),
-                    supports_spicy,
-                }
+            .or_insert_with(|| Peer {
+                count: 1,
+                state: self.mode.limit(&1),
+                last_seen: Instant::now(),
+                supports_spicy: SpicyPayloadKind::accepts_encoding(headers),
             });
 
         (peer.state, peer.supports_spicy)
@@ -157,11 +155,15 @@ where
         let delay = match peer_state {
             PeerState::Ready => None,
             PeerState::Delay(delay) => Some(Box::pin(sleep(delay))),
-            PeerState::SpicyDrop if supports_spicy => {
+            PeerState::SpicyDrop => {
                 return self
                     .spicy_payload
                     .as_ref()
-                    .cloned()
+                    .zip(supports_spicy)
+                    .and_then(|(payloads, kind)| {
+                        let guard = Guard::new();
+                        payloads.peek(&kind, &guard).cloned()
+                    })
                     .map_or_else(NailedResponseFuture::dropped, NailedResponseFuture::spicy);
             }
             _ => return NailedResponseFuture::dropped(),

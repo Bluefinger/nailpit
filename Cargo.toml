@@ -105,6 +105,7 @@ nailstate = { path = "crates/nailstate" }
 nailip = { path = "crates/nailip" }
 nailotel = { path = "crates/nailotel" }
 nailroutes = { path = "crates/nailroutes" }
+nailspicy = { path = "crates/nailspicy" }
 axum.workspace = true
 tokio.workspace = true
 color-eyre.workspace = true
