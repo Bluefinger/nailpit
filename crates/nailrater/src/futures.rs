@@ -72,7 +72,7 @@ impl<T> NailedResponseFuture<T> {
         }
     }
 
-    pub fn spicy((kind, payload): (SpicyPayloadKind, Bytes)) -> Self {
+    pub fn spicy(payload: Bytes, kind: SpicyPayloadKind) -> Self {
         Self {
             state: NailedState::Spicy { payload, kind },
         }

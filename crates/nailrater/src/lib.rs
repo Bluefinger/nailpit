@@ -16,7 +16,7 @@ use modes::LimitModes;
 use nailconfig::RateLimitingConfig;
 use nailip::IdentifiedPeer;
 use nailspicy::{SpicyPayloadKind, SpicyPayloads};
-use scc::{HashMap, ebr::Guard};
+use scc::HashMap;
 use tokio::time::sleep;
 use wyrand::RandomWyHashState;
 
@@ -161,13 +161,11 @@ where
                     .as_ref()
                     .zip(supports_spicy)
                     .and_then(|(payloads, kind)| {
-                        let guard = Guard::new();
                         payloads
-                            .peek(&kind, &guard)
-                            .cloned()
-                            .map(|payload| (kind, payload))
+                            .peek_with(&kind, |_, payload| payload.clone())
+                            .map(|payload| NailedResponseFuture::spicy(payload, kind))
                     })
-                    .map_or_else(NailedResponseFuture::dropped, NailedResponseFuture::spicy);
+                    .unwrap_or_else(NailedResponseFuture::dropped);
             }
             _ => return NailedResponseFuture::dropped(),
         };
