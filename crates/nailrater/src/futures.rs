@@ -13,6 +13,7 @@ use hyper::{
     StatusCode,
     header::{CONTENT_ENCODING, CONTENT_TYPE},
 };
+use nailspicy::SpicyPayloadKind;
 use pin_project_lite::pin_project;
 use tokio::time::Sleep;
 
@@ -33,6 +34,7 @@ pin_project! {
         Dropped,
         Spicy {
             payload: Bytes,
+            kind: SpicyPayloadKind
         },
         Error,
     }
@@ -70,9 +72,9 @@ impl<T> NailedResponseFuture<T> {
         }
     }
 
-    pub fn spicy(payload: Bytes) -> Self {
+    pub fn spicy((kind, payload): (SpicyPayloadKind, Bytes)) -> Self {
         Self {
-            state: NailedState::Spicy { payload },
+            state: NailedState::Spicy { payload, kind },
         }
     }
 
@@ -118,7 +120,7 @@ where
             NailedStateProj::Dropped => Poll::Ready(Ok(
                 (StatusCode::TOO_MANY_REQUESTS, "Go away").into_response()
             )),
-            NailedStateProj::Spicy { payload } => {
+            NailedStateProj::Spicy { payload, kind } => {
                 let mut response = (StatusCode::TOO_MANY_REQUESTS, payload.clone()).into_response();
 
                 let headers = response.headers_mut();
@@ -127,7 +129,7 @@ where
                     CONTENT_TYPE,
                     HeaderValue::from_static("text/html; charset=utf-8"),
                 );
-                headers.insert(CONTENT_ENCODING, HeaderValue::from_static("br"));
+                headers.insert(CONTENT_ENCODING, HeaderValue::from_static(kind.as_str()));
 
                 Poll::Ready(Ok(response))
             }

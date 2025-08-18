@@ -12,6 +12,15 @@ pub enum SpicyPayloadKind {
 }
 
 impl SpicyPayloadKind {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SpicyPayloadKind::Gz => "gzip",
+            SpicyPayloadKind::Brotli => "br",
+        }
+    }
+}
+
+impl SpicyPayloadKind {
     fn file_kind(file: impl AsRef<str>) -> Option<SpicyPayloadKind> {
         let file = file.as_ref();
 
@@ -31,8 +40,8 @@ impl SpicyPayloadKind {
             .and_then(|header| {
                 header
                     .contains("br")
-                    .then(|| Self::Brotli)
-                    .or_else(|| header.contains("gzip").then(|| Self::Gz))
+                    .then_some(Self::Brotli)
+                    .or_else(|| header.contains("gzip").then_some(Self::Gz))
             })
     }
 }

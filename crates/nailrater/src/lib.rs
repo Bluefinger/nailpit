@@ -162,7 +162,10 @@ where
                     .zip(supports_spicy)
                     .and_then(|(payloads, kind)| {
                         let guard = Guard::new();
-                        payloads.peek(&kind, &guard).cloned()
+                        payloads
+                            .peek(&kind, &guard)
+                            .cloned()
+                            .map(|payload| (kind, payload))
                     })
                     .map_or_else(NailedResponseFuture::dropped, NailedResponseFuture::spicy);
             }
