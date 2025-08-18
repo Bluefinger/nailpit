@@ -8,6 +8,10 @@ use std::{
 };
 
 use axum::{body::Body, extract::Request, response::Response};
+use fastrace::{
+    Span,
+    future::{FutureExt as SpanFutureExt, InSpan},
+};
 use futures::NailedResponseFuture;
 use futures_lite::{FutureExt, future::Boxed};
 
@@ -136,7 +140,7 @@ where
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future = NailedResponseFuture<S::Future>;
+    type Future = InSpan<NailedResponseFuture<S::Future>>;
 
     fn poll_ready(
         &mut self,
@@ -146,8 +150,10 @@ where
     }
 
     fn call(&mut self, req: Request<ReqBody>) -> Self::Future {
+        let parent = Span::enter_with_local_parent("NailRater");
+
         let Some(proxied) = req.extensions().get::<IdentifiedPeer>() else {
-            return NailedResponseFuture::error();
+            return NailedResponseFuture::error().in_span(parent);
         };
 
         let (peer_state, supports_spicy) = self.track_visiting_peer(proxied.ip(), req.headers());
@@ -165,15 +171,16 @@ where
                             .peek_with(&kind, |_, payload| payload.clone())
                             .map(|payload| NailedResponseFuture::spicy(payload, kind))
                     })
-                    .unwrap_or_else(NailedResponseFuture::dropped);
+                    .unwrap_or_else(NailedResponseFuture::dropped)
+                    .in_span(parent);
             }
-            _ => return NailedResponseFuture::dropped(),
+            _ => return NailedResponseFuture::dropped().in_span(parent),
         };
 
         let prune = self.prune_recorded_peers();
 
         let inner = self.inner.call(req);
 
-        NailedResponseFuture::normal(prune, delay, inner)
+        NailedResponseFuture::normal(prune, delay, inner).in_span(parent)
     }
 }
