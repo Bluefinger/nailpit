@@ -5,6 +5,9 @@ use wyrand::RandomWyHashState;
 
 pub type SpicyPayloads = HashIndex<SpicyPayloadKind, Bytes, RandomWyHashState>;
 
+static GZIP: &str = "gzip";
+static BROTLI: &str = "br";
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum SpicyPayloadKind {
     Gz,
@@ -14,8 +17,8 @@ pub enum SpicyPayloadKind {
 impl SpicyPayloadKind {
     pub fn as_str(&self) -> &'static str {
         match self {
-            SpicyPayloadKind::Gz => "gzip",
-            SpicyPayloadKind::Brotli => "br",
+            SpicyPayloadKind::Gz => GZIP,
+            SpicyPayloadKind::Brotli => BROTLI,
         }
     }
 }
@@ -39,9 +42,9 @@ impl SpicyPayloadKind {
             .and_then(|header| header.to_str().ok())
             .and_then(|header| {
                 header
-                    .contains("br")
+                    .contains(BROTLI)
                     .then_some(Self::Brotli)
-                    .or_else(|| header.contains("gzip").then_some(Self::Gz))
+                    .or_else(|| header.contains(GZIP).then_some(Self::Gz))
             })
     }
 }
