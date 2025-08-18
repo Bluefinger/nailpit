@@ -1,4 +1,4 @@
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 
 use axum::{Router, extract::NestedPath, http::HeaderValue, response::Html, routing::get};
 use fastrace::Span;
@@ -6,6 +6,7 @@ use fastrace_futures::StreamExt;
 use hyper::{HeaderMap, StatusCode, header::CONTENT_TYPE};
 use nailip::identify_peer;
 use nailrater::NailRaterLayer;
+use nailspicy::SpicyPayloads;
 use nailstate::{AppConfig, NailInputs, ServerState};
 use nailstream::NailStream;
 use nailtrace::tracing_root_span;
@@ -42,7 +43,11 @@ async fn generated(config: AppConfig, input: NailInputs, path: NestedPath) -> Na
     .headers(GEN_HEADER.clone())
 }
 
-pub fn nail_app(routes: Router, state: ServerState) -> Router {
+pub fn nail_app(
+    routes: Router,
+    state: ServerState,
+    spicy_payload: Option<SpicyPayloads>,
+) -> Router {
     routes
         .layer(
             ServiceBuilder::new()
@@ -51,7 +56,10 @@ pub fn nail_app(routes: Router, state: ServerState) -> Router {
                 .layer(axum::middleware::from_fn(tracing_root_span))
                 .layer(NormalizePathLayer::trim_trailing_slash())
                 .layer(CompressionLayer::new().quality(CompressionLevel::Default))
-                .layer(NailRaterLayer::new(state.config.rate_limiting.clone()))
+                .layer(NailRaterLayer::new(
+                    state.config.rate_limiting.clone(),
+                    spicy_payload.map(Arc::new),
+                ))
                 .propagate_x_request_id(),
         )
         .route("/favicon.ico", get(async || StatusCode::NOT_FOUND))

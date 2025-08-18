@@ -1,0 +1,18 @@
+[package]
+name = "nailspicy"
+authors.workspace = true
+edition.workspace = true
+repository.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+nailconfig = { path = "../nailconfig" }
+hyper.workspace = true
+wyrand.workspace = true
+scc.workspace = true
+log.workspace = true
+
+[lints]
+workspace = true

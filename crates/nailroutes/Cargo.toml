@@ -13,6 +13,7 @@ nailip = { path = "../nailip" }
 nailrater = { path = "../nailrater" }
 nailstate = { path = "../nailstate" }
 nailstream = { path = "../nailstream" }
+nailspicy = { path = "../nailspicy" }
 axum.workspace = true
 hyper.workspace = true
 fastrace.workspace = true

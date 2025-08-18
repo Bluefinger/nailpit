@@ -10,6 +10,7 @@ rust-version.workspace = true
 [dependencies]
 nailfv = { path = "../nailfv" }
 nailconfig = { path = "../nailconfig" }
+nailspicy = { path = "../nailspicy" }
 nailip = { path = "../nailip" }
 axum.workspace = true
 futures-lite.workspace = true
@@ -19,6 +20,7 @@ scc.workspace = true
 tokio.workspace = true
 wyrand.workspace = true
 tower.workspace = true
+fastrace.workspace = true
 
 [lints]
 workspace = true
