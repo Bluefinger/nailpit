@@ -95,7 +95,7 @@ pub fn links(route: &str, max_links: usize, rng: &mut impl RngCore) -> Bytes {
     })
     .enumerate();
 
-    let mut nav = String::from("<nav><ul>");
+    let mut nav = String::from("<nav style=\"visibility: hidden;\"><ul>");
 
     for (i, link) in link.take(total_links) {
         let link = format!("<li><a href=\"{route}/{}\">{}</a></li>", link, i + 1);
@@ -112,7 +112,7 @@ pub fn footer(route: &str, prompts: &[String], max_links: usize, rng: &mut impl 
 
     if let Some(prompt) = match prompts.len() {
         0 => None,
-        1 => prompts.get(1),
+        1 => prompts.first(),
         _ => prompts.choose(rng),
     } {
         footer.extend(b"<p>");
