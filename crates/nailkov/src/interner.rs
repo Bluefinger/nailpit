@@ -1,5 +1,5 @@
 use indexmap::{Equivalent, IndexMap};
-use wyrand::RandomWyHashState;
+use rapidhash::fast::RandomState;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct InternedString(pub(crate) u32);
@@ -41,7 +41,7 @@ unsafe impl Sync for StringPtr {}
 
 #[derive(Debug, Clone)]
 pub struct Interner {
-    collected: IndexMap<StringPtr, InternedString, RandomWyHashState>,
+    collected: IndexMap<StringPtr, InternedString, RandomState>,
     buffer: String,
     stored: Vec<String>,
 }
@@ -65,7 +65,7 @@ impl Interner {
         let stored = Vec::with_capacity(8);
 
         Interner {
-            collected: IndexMap::with_hasher(RandomWyHashState::new()),
+            collected: IndexMap::with_hasher(RandomState::new()),
             stored,
             buffer: String::with_capacity(cap.next_power_of_two()),
         }

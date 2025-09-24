@@ -15,7 +15,6 @@ rapidhash = { workspace = true, features = ["rand", "unsafe"] }
 hashbrown.workspace = true
 rand.workspace = true
 rand_distr.workspace = true
-wyrand.workspace = true
 itertools.workspace = true
 unicode-segmentation.workspace = true
 log.workspace = true
