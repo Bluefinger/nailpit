@@ -17,7 +17,7 @@ async fn spawn_axum_server<F>(
 where
     F: Future<Output = ()> + Send + 'static,
 {
-    let listener = tokio::net::TcpListener::bind(&state.config.socket_addr).await?;
+    let listener = tokio::net::TcpListener::bind(&state.config.server.socket_addr).await?;
 
     log::info!("listening on http://{}", listener.local_addr()?,);
 
@@ -94,7 +94,7 @@ fn main() -> Result<()> {
         .worker_threads(
             std::thread::available_parallelism()?
                 .get()
-                .min(config.worker_threads),
+                .min(config.server.worker_threads),
         )
         .enable_all()
         .build()?;

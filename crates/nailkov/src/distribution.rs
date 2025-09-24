@@ -5,7 +5,7 @@ use core::hash::BuildHasher;
 use indexmap::IndexMap;
 use rand::Rng;
 use rand_distr::{Distribution, weighted::WeightedAliasIndex};
-use wyrand::RandomWyHashState;
+use rapidhash::fast::RandomState;
 
 use crate::{error::NailError, token::Token};
 
@@ -28,7 +28,7 @@ impl Distribution<Token> for TokenWeights {
 
 /// Builder for [`TokenWeights`].
 #[derive(Clone, Debug)]
-pub struct TokenWeightsBuilder<S = RandomWyHashState> {
+pub struct TokenWeightsBuilder<S = RandomState> {
     /// Counts how many times a token is likely to appear.
     occurrences: IndexMap<Token, u64, S>,
 }
@@ -63,8 +63,8 @@ impl<S: BuildHasher> TokenWeightsBuilder<S> {
     }
 }
 
-impl Default for TokenWeightsBuilder<RandomWyHashState> {
+impl Default for TokenWeightsBuilder<RandomState> {
     fn default() -> Self {
-        Self::new(RandomWyHashState::new())
+        Self::new(RandomState::new())
     }
 }

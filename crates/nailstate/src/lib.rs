@@ -7,7 +7,7 @@ use nailrng::FastRng;
 use rand::seq::IndexedRandom;
 
 /// Smart pointer for all available Markov chains.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct NailInputs(Arc<[MarkovGen]>);
 
 impl NailInputs {
@@ -23,6 +23,12 @@ impl NailInputs {
 
             self.0.choose(&mut rng).unwrap().clone()
         }
+    }
+}
+
+impl std::fmt::Debug for NailInputs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("NailInputs").finish_non_exhaustive()
     }
 }
 

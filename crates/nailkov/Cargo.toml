@@ -11,6 +11,8 @@ license.workspace = true
 workspace = true
 
 [dependencies]
+rapidhash = { workspace = true, features = ["rand", "unsafe"] }
+hashbrown.workspace = true
 rand.workspace = true
 rand_distr.workspace = true
 wyrand.workspace = true

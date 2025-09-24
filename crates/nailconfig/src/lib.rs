@@ -1,22 +1,14 @@
 //! Crate for defining and handling `nailpit` configuration. Defines the main
 //! [`NailConfig`] struct, as well as the utility method to derive the config object
-//! from either `toml` files or environment variables, with the format
-//! `PIT__GENERATOR__TIMEOUT` as an example.
+//! from various `toml` files.
 
 use std::ops::Deref;
 
 use color_eyre::Result;
-use serde_aux::field_attributes::{
-    deserialize_bool_from_anything, deserialize_number_from_string,
-    deserialize_option_number_from_string,
-};
 
 #[derive(Debug, serde::Deserialize)]
 pub struct NailConfig {
-    pub pit_routes: Vec<String>,
-    pub socket_addr: String,
-    #[serde(deserialize_with = "deserialize_number_from_string")]
-    pub worker_threads: usize,
+    pub server: ServerConfig,
     pub generator: GeneratorConfig,
     #[serde(default)]
     pub rate_limiting: RateLimitingConfig,
@@ -41,27 +33,25 @@ impl Deref for PromptsList {
 }
 
 #[derive(Debug, serde::Deserialize)]
+pub struct ServerConfig {
+    pub pit_routes: Vec<String>,
+    pub socket_addr: String,
+    pub worker_threads: usize,
+}
+
+#[derive(Debug, serde::Deserialize)]
 pub struct GeneratorConfig {
     #[serde(default)]
     pub prompts: PromptsList,
     pub input_files: String,
-    #[serde(deserialize_with = "deserialize_number_from_string")]
     pub min_paragraph_size: usize,
-    #[serde(deserialize_with = "deserialize_option_number_from_string")]
     pub max_paragraph_size: Option<usize>,
-    #[serde(deserialize_with = "deserialize_number_from_string")]
     pub payload_size: usize,
-    #[serde(deserialize_with = "deserialize_number_from_string")]
     pub timeout: u64,
-    #[serde(deserialize_with = "deserialize_number_from_string")]
     pub min_delay: u64,
-    #[serde(deserialize_with = "deserialize_option_number_from_string")]
     pub max_delay: Option<u64>,
-    #[serde(deserialize_with = "deserialize_number_from_string")]
     pub chunk_size: usize,
-    #[serde(deserialize_with = "deserialize_number_from_string")]
     pub header_size: usize,
-    #[serde(deserialize_with = "deserialize_number_from_string")]
     pub max_pit_links: usize,
 }
 
@@ -88,28 +78,17 @@ pub enum RateLimitingConfig {
     #[serde(rename = "no_limit")]
     NoLimit,
     #[serde(rename = "soft_limit")]
-    SoftLimit {
-        #[serde(deserialize_with = "deserialize_number_from_string")]
-        soft_limit: u64,
-        #[serde(deserialize_with = "deserialize_number_from_string")]
-        soft_delay: u64,
-    },
+    SoftLimit { soft_limit: u64, soft_delay: u64 },
     #[serde(rename = "hard_limit")]
     HardLimit {
-        #[serde(deserialize_with = "deserialize_number_from_string")]
         hard_limit: u64,
-        #[serde(default)]
         drop_behavior: DropBehavior,
     },
     #[serde(rename = "soft_with_hard_limit")]
     SoftWithHardLimit {
-        #[serde(deserialize_with = "deserialize_number_from_string")]
         soft_limit: u64,
-        #[serde(deserialize_with = "deserialize_number_from_string")]
         hard_limit: u64,
-        #[serde(deserialize_with = "deserialize_number_from_string")]
         soft_delay: u64,
-        #[serde(default)]
         drop_behavior: DropBehavior,
     },
 }
@@ -118,9 +97,7 @@ pub enum RateLimitingConfig {
 pub struct OpenTelemetryConfig {
     pub endpoint: String,
     pub service_name: String,
-    #[serde(deserialize_with = "deserialize_bool_from_anything")]
     pub logs: bool,
-    #[serde(deserialize_with = "deserialize_bool_from_anything")]
     pub traces: bool,
 }
 
@@ -136,11 +113,6 @@ pub fn get_configuration() -> Result<NailConfig> {
             config::File::from(config_dir.join("pit.toml"))
                 .required(false)
                 .format(config::FileFormat::Toml),
-        )
-        .add_source(
-            config::Environment::with_prefix("PIT")
-                .prefix_separator("__")
-                .separator("__"),
         )
         .build()?;
 

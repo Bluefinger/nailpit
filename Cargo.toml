@@ -8,7 +8,7 @@ edition = "2024"
 repository = "https://github.com/Bluefinger/nailpit"
 version = "0.1.0"
 license = "AGPL-3.0-only"
-rust-version = "1.86.0"
+rust-version = "1.89.0"
 
 [workspace.lints.clippy]
 undocumented_unsafe_blocks = "warn"
@@ -29,11 +29,12 @@ serde = { version = "1.0.219", features = ["derive"] }
 rand_core = "0.9.3"
 rand = { version = "0.9", default-features = false }
 rand_distr = { version = "0.5.1" }
-wyrand = { version = "0.3.2", features = ["wyhash", "fully_randomised_wyhash"] }
+wyrand = { version = "0.3.2" }
 hashbrown = { version = "0.15.2", default-features = false, features = [
     "equivalent",
     "inline-more",
 ] }
+rapidhash = { version = "4.1.0", default-features = false }
 fastrace = { version = "0.7.9" }
 fastrace-futures = { version = "0.7.9" }
 logforth = { version = "0.26", features = [
@@ -119,5 +120,5 @@ mimalloc-safe = { version = "0.1.50", optional = true }
 [profile.release]
 codegen-units = 1
 lto = "fat"
-strip = true
+debug = true
 panic = "abort"

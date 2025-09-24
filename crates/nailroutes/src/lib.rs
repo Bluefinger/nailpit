@@ -71,6 +71,7 @@ pub fn nail_route(state: ServerState) -> Router {
 
     let pit = state
         .config
+        .server
         .pit_routes
         .iter()
         .fold(Router::new(), |router, path| {

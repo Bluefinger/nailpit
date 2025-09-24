@@ -39,8 +39,6 @@ pub fn title(chain: &NailKov, config: &NailConfig, rng: &mut impl RngCore) -> (B
 
     let title_text: String = text_generator(&interner, chain, 24, rng).collect();
 
-    drop(interner);
-
     let mut title = BytesMut::new();
 
     title.extend(b"<title>");
@@ -58,28 +56,39 @@ pub fn title(chain: &NailKov, config: &NailConfig, rng: &mut impl RngCore) -> (B
     let max_paras: u32 = rng.random_range(1..=3);
 
     for _ in 0..max_paras {
-        header.extend(paragraph(chain, get_desired_size(config, rng), rng));
+        header.extend(paragraph(
+            &interner,
+            chain,
+            get_desired_size(config, rng),
+            rng,
+        ));
     }
 
     (title.freeze(), header.freeze())
 }
 
-pub fn paragraph(chain: &NailKov, size: usize, rng: &mut impl RngCore) -> Bytes {
-    let interner = INTERNER.read();
-
-    iter_into_bytes(
+pub fn paragraph<'a>(
+    interner: &'a Interner,
+    chain: &'a NailKov,
+    size: usize,
+    rng: &'a mut impl RngCore,
+) -> impl Iterator<Item = u8> + 'a {
+    into_bytes_iter(
         once("<p>")
-            .chain(text_generator(&interner, chain, size, rng))
+            .chain(text_generator(interner, chain, size, rng))
             .chain(once("</p>\n")),
     )
 }
 
-pub fn header(chain: &NailKov, size: usize, rng: &mut impl RngCore) -> Bytes {
-    let interner = INTERNER.read();
-
-    iter_into_bytes(
+pub fn header<'a>(
+    interner: &'a Interner,
+    chain: &'a NailKov,
+    size: usize,
+    rng: &'a mut impl RngCore,
+) -> impl Iterator<Item = u8> + 'a {
+    into_bytes_iter(
         once("\n<h2>")
-            .chain(text_generator(&interner, chain, size, rng))
+            .chain(text_generator(interner, chain, size, rng))
             .chain(once("</h2>\n")),
     )
 }
@@ -128,6 +137,6 @@ pub fn footer(route: &str, prompts: &[String], max_links: usize, rng: &mut impl 
 }
 
 #[inline]
-fn iter_into_bytes<'a>(generator: impl Iterator<Item = &'a str>) -> Bytes {
-    Bytes::from_iter(generator.flat_map(|text| text.as_bytes()).copied())
+fn into_bytes_iter<'a>(generator: impl Iterator<Item = &'a str>) -> impl Iterator<Item = u8> {
+    generator.flat_map(|text| text.as_bytes()).copied()
 }

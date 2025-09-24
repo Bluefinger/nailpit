@@ -26,7 +26,7 @@ mod html_gen;
 
 static INTERNER: LazyLock<Arc<RwLock<Interner>>> = LazyLock::new(Default::default);
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct MarkovGen {
     chain: Arc<NailKov>,
 }
@@ -49,14 +49,21 @@ impl MarkovGen {
         // Allocate more than we need, as we might generate more tokens than our 4kB threshold
         let mut buffer = BytesMut::with_capacity(config.generator.chunk_size * 2);
 
+        let interner = INTERNER.read();
+
         loop {
             // Randomise how many paragraphs we want per section
             let max_paras: u32 = rng.random_range(1..=4);
 
-            buffer.extend(header(chain, config.generator.header_size, rng));
+            buffer.extend(header(&interner, chain, config.generator.header_size, rng));
 
             for _ in 0..max_paras {
-                buffer.extend(paragraph(chain, get_desired_size(config, rng), rng));
+                buffer.extend(paragraph(
+                    &interner,
+                    chain,
+                    get_desired_size(config, rng),
+                    rng,
+                ));
             }
 
             // We can generate more before handing it off to be streamed to the client,
