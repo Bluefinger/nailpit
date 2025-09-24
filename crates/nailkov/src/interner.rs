@@ -16,7 +16,7 @@ struct StringPtr(*const str);
 
 impl StringPtr {
     #[inline(always)]
-    fn cast(&self) -> &str {
+    const fn cast(&self) -> &str {
         // SAFETY: The pointer is stable as it points to memory that is never
         // moved/invalidated while this struct lives, therefore can be safely
         // dereferenced back to a string slice.
