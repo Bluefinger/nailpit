@@ -53,10 +53,16 @@ impl Default for Interner {
 }
 
 impl Interner {
+    #[inline]
     pub fn lookup(&self, id: impl Into<InternedString>) -> Option<&str> {
         self.collected
             .get_index(id.into().0 as usize)
             .map(|(ptr, _)| ptr.cast())
+    }
+
+    #[inline]
+    pub fn lookup_bytes(&self, id: impl Into<InternedString>) -> Option<&[u8]> {
+        self.lookup(id).map(str::as_bytes)
     }
 
     pub fn with_capacity(cap: usize) -> Interner {

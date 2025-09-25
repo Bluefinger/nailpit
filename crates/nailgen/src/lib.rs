@@ -19,7 +19,7 @@ use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 
 use crate::delay::delay_output;
-use crate::html_gen::{footer, get_desired_size, header, paragraph, title};
+use crate::html_gen::{footer, get_desired_size, header, paragraph, initial_content};
 
 mod delay;
 mod html_gen;
@@ -85,34 +85,9 @@ impl MarkovGen {
         let start_time = std::time::Instant::now();
         let mut rng = FastRng::default();
 
-        let (title, content) = title(self.chain.as_ref(), &config, &mut rng);
-
         let mut initial_payload = BytesMut::with_capacity(2048);
 
-        // For the first payload we want to make it look like an HTML page.
-        // We want to ensure it has a unique title that matches the article header, so to
-        // make it look more like a legit page.
-        initial_payload.extend_from_slice(
-            r#"<!DOCTYPE html>
-<html lang="en">
-<head>
-    "#
-            .as_bytes(),
-        );
-
-        initial_payload.extend(title);
-
-        initial_payload.extend_from_slice(
-            r#"    <meta charset="utf-8" />
-    <meta name="robots" content="noindex, nofollow, nosnippet, noimageindex" />
-    <meta name="referrer" content="noreferrer" />
-    <meta name="color-theme" content="dark" />
-</head>
-<body><main><article>"#
-                .as_bytes(),
-        );
-
-        initial_payload.extend(content);
+        initial_content(self.chain.as_ref(), &config, &mut rng, &mut initial_payload);
 
         let payload_size = initial_payload.len();
 

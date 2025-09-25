@@ -26,44 +26,59 @@ fn text_generator<'a>(
     chain: &'a NailKov,
     size: usize,
     rng: &'a mut impl RngCore,
-) -> impl Iterator<Item = &'a str> + 'a {
+) -> impl Iterator<Item = &'a [u8]> + 'a {
     chain
         .generate_tokens(rng)
-        .flat_map(|token| interner.lookup(token))
+        .flat_map(|token| interner.lookup_bytes(token))
         .take(size)
 }
 
-pub fn title(chain: &NailKov, config: &NailConfig, rng: &mut impl RngCore) -> (Bytes, Bytes) {
+pub fn initial_content(chain: &NailKov, config: &NailConfig, rng: &mut impl RngCore, buf_mut: &mut BytesMut) {
     let interner = INTERNER.read();
 
-    let title_text: String = text_generator(&interner, chain, 24, rng).collect();
+    buf_mut.extend_from_slice(
+        r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+    "#
+        .as_bytes(),
+    );
 
-    let mut title = BytesMut::new();
+    let title_text: Vec<u8> = text_generator(&interner, chain, 24, rng)
+        .flatten()
+        .copied()
+        .collect();
 
-    title.extend_from_slice(b"<title>");
-    title.extend_from_slice(title_text.as_bytes());
-    title.extend_from_slice(b"</title>\n");
+    buf_mut.extend_from_slice(b"<title>");
+    buf_mut.extend_from_slice(&title_text);
+    buf_mut.extend_from_slice(b"</title>\n");
 
-    let mut header = BytesMut::new();
+    buf_mut.extend_from_slice(
+        r#"    <meta charset="utf-8" />
+    <meta name="robots" content="noindex, nofollow, nosnippet, noimageindex" />
+    <meta name="referrer" content="noreferrer" />
+    <meta name="color-theme" content="dark" />
+</head>
+<body><main><article>"#
+            .as_bytes(),
+    );
 
-    header.extend_from_slice(b"<header><h1>");
+    buf_mut.extend_from_slice(b"<header><h1>");
     // Consume the title string, so we don't waste the allocated space.
-    header.extend(title_text.into_bytes());
-    header.extend_from_slice(b"</h1></header>\n");
+    buf_mut.extend(title_text);
+    buf_mut.extend_from_slice(b"</h1></header>\n");
 
     // Randomise how many initial paragraphs we want
     let max_paras: u32 = rng.random_range(1..=3);
 
     for _ in 0..max_paras {
-        header.extend(paragraph(
+        buf_mut.extend(paragraph(
             &interner,
             chain,
             get_desired_size(config, rng),
             rng,
         ));
     }
-
-    (title.freeze(), header.freeze())
 }
 
 pub fn paragraph<'a>(
@@ -72,11 +87,10 @@ pub fn paragraph<'a>(
     size: usize,
     rng: &'a mut impl RngCore,
 ) -> impl Iterator<Item = &'a u8> + 'a {
-    into_bytes_iter(
-        once("<p>")
-            .chain(text_generator(interner, chain, size, rng))
-            .chain(once("</p>\n")),
-    )
+    once(b"<p>".as_slice())
+        .chain(text_generator(interner, chain, size, rng))
+        .chain(once(b"</p>\n".as_slice()))
+        .flatten()
 }
 
 pub fn header<'a>(
@@ -85,11 +99,10 @@ pub fn header<'a>(
     size: usize,
     rng: &'a mut impl RngCore,
 ) -> impl Iterator<Item = &'a u8> + 'a {
-    into_bytes_iter(
-        once("\n<h2>")
-            .chain(text_generator(interner, chain, size, rng))
-            .chain(once("</h2>\n")),
-    )
+    once(b"\n<h2>".as_slice())
+        .chain(text_generator(interner, chain, size, rng))
+        .chain(once(b"</h2>\n".as_slice()))
+        .flatten()
 }
 
 pub fn links<'a>(
@@ -116,7 +129,7 @@ pub fn links<'a>(
 }
 
 pub fn footer(route: &str, prompts: &[String], max_links: usize, rng: &mut impl RngCore) -> Bytes {
-    let mut footer = BytesMut::with_capacity(2048);
+    let mut footer = BytesMut::with_capacity(512);
 
     if let Some(prompt) = match prompts.len() {
         0 => None,
@@ -133,9 +146,4 @@ pub fn footer(route: &str, prompts: &[String], max_links: usize, rng: &mut impl 
     footer.extend_from_slice(b"</footer>\n</body>\n</html>");
 
     footer.freeze()
-}
-
-#[inline]
-fn into_bytes_iter<'a>(generator: impl Iterator<Item = &'a str>) -> impl Iterator<Item = &'a u8> {
-    generator.flat_map(|text| text.as_bytes())
 }
