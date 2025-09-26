@@ -18,7 +18,7 @@ hyper.workspace = true
 pin-project-lite.workspace = true
 scc.workspace = true
 tokio.workspace = true
-wyrand.workspace = true
+rapidhash.workspace = true
 tower.workspace = true
 fastrace.workspace = true
 

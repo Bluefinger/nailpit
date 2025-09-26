@@ -1,14 +1,15 @@
 use hyper::{HeaderMap, body::Bytes, header::ACCEPT_ENCODING};
 use nailconfig::{DropBehavior, NailConfig, RateLimitingConfig};
 use scc::HashIndex;
-use wyrand::RandomWyHashState;
+use rapidhash::fast::RandomState;
 
-pub type SpicyPayloads = HashIndex<SpicyPayloadKind, Bytes, RandomWyHashState>;
+pub type SpicyPayloads = HashIndex<SpicyPayloadKind, Bytes, RandomState>;
 
 static GZIP: &str = "gzip";
 static BROTLI: &str = "br";
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[repr(u32)]
 pub enum SpicyPayloadKind {
     Gz,
     Brotli,

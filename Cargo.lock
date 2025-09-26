@@ -1228,10 +1228,10 @@ dependencies = [
  "nailip",
  "nailspicy",
  "pin-project-lite",
+ "rapidhash",
  "scc",
  "tokio",
  "tower",
- "wyrand",
 ]
 
 [[package]]
@@ -1268,8 +1268,8 @@ dependencies = [
  "hyper",
  "log",
  "nailconfig",
+ "rapidhash",
  "scc",
- "wyrand",
 ]
 
 [[package]]
@@ -2609,8 +2609,6 @@ version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "15e0359b0b8d9cdef235a1fd4a8c5d02e4c9204e9fac861c14c229a8e803d1a6"
 dependencies = [
- "getrandom",
- "rand",
  "rand_core",
 ]
 

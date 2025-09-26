@@ -22,7 +22,7 @@ use nailip::IdentifiedPeer;
 use nailspicy::{SpicyPayloadKind, SpicyPayloads};
 use scc::HashMap;
 use tokio::time::sleep;
-use wyrand::RandomWyHashState;
+use rapidhash::fast::RandomState;
 
 const SOURCE_TIMEOUT: Duration = Duration::from_secs(60 * 2);
 
@@ -68,7 +68,7 @@ impl<S> tower::Layer<S> for NailRaterLayer {
 
 #[derive(Debug, Clone)]
 pub struct NailRater<S> {
-    peers: Arc<HashMap<IpAddr, Peer, RandomWyHashState>>,
+    peers: Arc<HashMap<IpAddr, Peer, RandomState>>,
     mode: LimitModes,
     schedule_pruning: Option<Instant>,
     spicy_payload: Option<Arc<SpicyPayloads>>,
@@ -113,7 +113,7 @@ impl<S> NailRater<S> {
         (peer.state, peer.supports_spicy)
     }
 
-    fn prune(peers: Arc<HashMap<IpAddr, Peer, RandomWyHashState>>) -> Boxed<()> {
+    fn prune(peers: Arc<HashMap<IpAddr, Peer, RandomState>>) -> Boxed<()> {
         async move {
             peers
                 .retain_async(|_, v| v.last_seen.elapsed() < crate::SOURCE_TIMEOUT)

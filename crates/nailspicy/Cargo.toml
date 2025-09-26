@@ -10,7 +10,7 @@ rust-version.workspace = true
 [dependencies]
 nailconfig = { path = "../nailconfig" }
 hyper.workspace = true
-wyrand.workspace = true
+rapidhash.workspace = true
 scc.workspace = true
 log.workspace = true
 

@@ -10,4 +10,4 @@ rust-version.workspace = true
 [dependencies]
 rand_core.workspace = true
 getrandom = { version = "0.3.2", features = ["std"] }
-wyrand = { workspace = true, features = ["threadrng_wyhash"] }
+wyrand.workspace = true
