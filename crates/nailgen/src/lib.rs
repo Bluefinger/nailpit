@@ -1,25 +1,27 @@
 //! Crate for defining a HTML generator based on a markov chain source, using a string
 //! interner to reduce memory usage both within a markov chain and across multiple chains.
 
+use core::{pin::Pin, task::Poll};
 use std::{
     path::Path,
     sync::{Arc, LazyLock},
+    time::Instant,
 };
 
 use axum::extract::NestedPath;
 use bytes::{Bytes, BytesMut};
 use color_eyre::Result;
-use fastrace::{Span, future::FutureExt};
+use futures_lite::Stream;
 use nailconfig::NailConfig;
 use nailkov::{NailKov, interner::Interner};
 use nailrng::FastRng;
 use parking_lot::RwLock;
+use pin_project_lite::pin_project;
 use rand::{Rng, RngCore};
-use tokio::sync::mpsc;
-use tokio_stream::wrappers::ReceiverStream;
+use tokio::time::Sleep;
 
 use crate::delay::delay_output;
-use crate::html_gen::{footer, get_desired_size, header, paragraph, initial_content};
+use crate::html_gen::{footer, get_desired_size, header, initial_content, paragraph};
 
 mod delay;
 mod html_gen;
@@ -31,21 +33,47 @@ pub struct MarkovGen {
     chain: Arc<NailKov>,
 }
 
-impl MarkovGen {
-    pub fn new(input: impl AsRef<Path>) -> Result<Self> {
-        let file = std::fs::read_to_string(input.as_ref())?;
+pin_project! {
+    #[project = GeneratorStateProj]
+    enum GeneratorState {
+        Start,
+        Pump,
+        Delay {
+            delay: Pin<Box<Sleep>>,
+        },
+        Footer,
+        Finished,
+    }
+}
 
-        let mut interner_write_lock = INTERNER.write();
+pin_project! {
+    pub struct MarkovStream {
+        path: NestedPath,
+        config: Arc<NailConfig>,
+        chain: MarkovGen,
+        start_time: Instant,
+        total_bytes: usize,
+        rng: FastRng,
+        #[pin]
+        state: GeneratorState,
+    }
+}
 
-        let chain = Arc::new(NailKov::from_input(&mut interner_write_lock, &file)?);
-
-        drop(interner_write_lock);
-
-        Ok(Self { chain })
+impl MarkovStream {
+    pub fn new(path: NestedPath, config: Arc<NailConfig>, chain: MarkovGen) -> Self {
+        Self {
+            path,
+            config,
+            chain,
+            total_bytes: 0,
+            start_time: Instant::now(),
+            rng: FastRng::default(),
+            state: GeneratorState::Start,
+        }
     }
 
     #[fastrace::trace]
-    fn generate(chain: &NailKov, config: &NailConfig, rng: &mut impl RngCore) -> Bytes {
+    fn pump(chain: &NailKov, config: &NailConfig, rng: &mut impl RngCore) -> Bytes {
         // Allocate more than we need, as we might generate more tokens than our 4kB threshold
         let mut buffer = BytesMut::with_capacity(config.generator.chunk_size * 2);
 
@@ -73,87 +101,104 @@ impl MarkovGen {
             }
         }
     }
+}
 
-    #[fastrace::trace(enter_on_poll = true)]
-    async fn spawn_generator(
-        self,
-        path: NestedPath,
-        config: Arc<NailConfig>,
-        tx: mpsc::Sender<Bytes>,
-    ) {
-        let mut bytes_written = 0_usize;
-        let start_time = std::time::Instant::now();
-        let mut rng = FastRng::default();
+impl Stream for MarkovStream {
+    type Item = Bytes;
 
-        let mut initial_payload = BytesMut::with_capacity(2048);
+    fn poll_next(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        let mut this = self.project();
 
-        initial_content(self.chain.as_ref(), &config, &mut rng, &mut initial_payload);
-
-        let payload_size = initial_payload.len();
-
-        if tx.send(initial_payload.freeze()).await.is_ok() {
-            bytes_written += payload_size;
-        } else {
-            log::info!("Stream broken before first payload could be sent");
-            return;
-        };
-
-        let time_limit_duration = std::time::Duration::from_secs(config.generator.timeout);
-        let size_limit = 1024 * config.generator.payload_size;
         loop {
-            delay_output(&config, &mut rng).await;
+            match this.state.as_mut().project() {
+                GeneratorStateProj::Start => {
+                    let mut content = BytesMut::with_capacity(2048);
 
-            if time_limit_duration.as_secs() != 0 && (start_time.elapsed() > time_limit_duration) {
-                log::info!(
-                    "Time limit was reached ({} s), breaking stream",
-                    time_limit_duration.as_secs()
-                );
-                break;
-            }
+                    initial_content(&this.chain.chain, this.config, this.rng, &mut content);
 
-            let content = MarkovGen::generate(self.chain.as_ref(), &config, &mut rng);
+                    *this.total_bytes += content.len();
 
-            let content_size = content.len();
+                    this.state.set(GeneratorState::Pump);
 
-            if tx.send(content).await.is_ok() {
-                bytes_written += content_size;
-            } else {
-                log::info!(
-                    "Stream broken, wrote {:.2} MB",
-                    (bytes_written as f64) * 1e-6
-                );
-                return;
-            };
+                    return Poll::Ready(Some(content.freeze()));
+                }
+                GeneratorStateProj::Pump => {
+                    let time_limit = std::time::Duration::from_secs(this.config.generator.timeout);
 
-            if size_limit != 0 && bytes_written >= size_limit {
-                log::info!(
-                    "Size limit was reached ({:.2} MB in {}us)",
-                    (bytes_written as f64) * 1e-6,
-                    start_time.elapsed().as_micros()
-                );
-                break;
+                    if time_limit.as_secs() == 0 && this.start_time.elapsed() >= time_limit {
+                        this.state.set(GeneratorState::Footer);
+                        continue;
+                    }
+
+                    if *this.total_bytes >= (this.config.generator.payload_size * 1024) {
+                        this.state.set(GeneratorState::Footer);
+                        continue;
+                    }
+
+                    if let Some(delay) = delay_output(this.config, this.rng) {
+                        this.state.set(GeneratorState::Delay {
+                            delay: Box::pin(delay),
+                        });
+                        continue;
+                    }
+
+                    let content = MarkovStream::pump(&this.chain.chain, this.config, this.rng);
+
+                    *this.total_bytes += content.len();
+
+                    return Poll::Ready(Some(content));
+                }
+                GeneratorStateProj::Delay { delay } => {
+                    if delay.as_mut().poll(cx).is_pending() {
+                        return Poll::Pending;
+                    }
+
+                    this.state.set(GeneratorState::Pump);
+                }
+                GeneratorStateProj::Footer => {
+                    let content = footer(
+                        this.path.as_str(),
+                        &this.config.generator.prompts,
+                        this.config.generator.max_pit_links,
+                        this.rng,
+                    );
+
+                    *this.total_bytes += content.len();
+
+                    this.state.set(GeneratorState::Finished);
+
+                    log::info!(
+                        "Written ({:.2} MB in {}us)",
+                        (*this.total_bytes as f64) * 1e-6,
+                        this.start_time.elapsed().as_micros()
+                    );
+
+                    return Poll::Ready(Some(content));
+                }
+                GeneratorStateProj::Finished => return Poll::Ready(None),
             }
         }
+    }
+}
 
-        let final_str = footer(
-            path.as_str(),
-            &config.generator.prompts,
-            config.generator.max_pit_links,
-            &mut rng,
-        );
+impl MarkovGen {
+    pub fn new(input: impl AsRef<Path>) -> Result<Self> {
+        let file = std::fs::read_to_string(input.as_ref())?;
 
-        tx.send(final_str).await.ok();
+        let mut interner_write_lock = INTERNER.write();
+
+        let chain = Arc::new(NailKov::from_input(&mut interner_write_lock, &file)?);
+
+        drop(interner_write_lock);
+
+        Ok(Self { chain })
     }
 
     #[fastrace::trace]
-    pub fn into_stream(self, path: NestedPath, config: Arc<NailConfig>) -> ReceiverStream<Bytes> {
-        let (tx, rx) = mpsc::channel::<Bytes>(8);
-
-        tokio::spawn(
-            self.spawn_generator(path, config, tx)
-                .in_span(Span::enter_with_local_parent("MarkovGen")),
-        );
-
-        ReceiverStream::new(rx)
+    pub fn into_stream(self, path: NestedPath, config: Arc<NailConfig>) -> MarkovStream {
+        MarkovStream::new(path, config, self)
     }
 }

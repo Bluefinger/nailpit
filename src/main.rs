@@ -1,9 +1,7 @@
 #![forbid(unsafe_code)]
-use std::{net::SocketAddr, sync::Arc, time::Duration};
+use std::{net::SocketAddr, sync::Arc};
 
 use color_eyre::Result;
-use futures_concurrency::future::TryJoin;
-use logforth::{append, filter::EnvFilter};
 
 #[cfg(feature = "mimalloc")]
 #[global_allocator]
@@ -17,9 +15,9 @@ async fn spawn_axum_server<F>(
 where
     F: Future<Output = ()> + Send + 'static,
 {
-    let listener = tokio::net::TcpListener::bind(&state.config.server.socket_addr).await?;
+    let listener = nailpit::net::get_tcp_socket(&state.config.server.socket_addr)?;
 
-    log::info!("listening on http://{}", listener.local_addr()?,);
+    log::info!("worker listening on http://{}", listener.local_addr()?);
 
     tokio::spawn(
         axum::serve(
@@ -39,46 +37,19 @@ async fn nailpit_main(
     config: Arc<nailconfig::NailConfig>,
     inputs: Arc<[nailgen::MarkovGen]>,
     spicy: Option<nailspicy::SpicyPayloads>,
-) -> Result<()> {
-    logforth::builder()
-        .dispatch(|d| {
-            let d = d.filter(EnvFilter::from_default_env());
-
-            if config.open_telemetry.logs {
-                d.diagnostic(logforth::diagnostic::FastraceDiagnostic::default())
-                    .append(logforth::append::FastraceEvent::default())
-                    .append(nailotel::init_logging_reporter(config.as_ref()))
-                    .append(append::Stderr::default())
-            } else {
-                d.append(append::Stderr::default())
-            }
-        })
-        .apply();
-
-    #[cfg(feature = "tracing")]
-    if config.open_telemetry.traces {
-        nailotel::init_tracing_reporter(config.as_ref());
-    }
-
-    log::info!("Welcome to Nailpit!");
-    log::info!("Loaded config: {config:?}");
-
-    let (shutdown_notifier, shutdown_signal) = tokio::sync::watch::channel(());
-    let shutdown_notifier = Arc::new(shutdown_notifier);
+    shutdown_notifier: Arc<tokio::sync::watch::Sender<()>>,
+) {
     let state = nailstate::ServerState::new(config, inputs);
 
-    (
-        spawn_axum_server(
-            state,
-            spicy,
-            nailpit::shutdown::wait_for_shutdown(shutdown_notifier),
-        ),
-        nailpit::shutdown::shutdown_task(shutdown_signal),
+    if let Err(e) = spawn_axum_server(
+        state,
+        spicy,
+        nailpit::shutdown::wait_for_shutdown(shutdown_notifier),
     )
-        .try_join()
-        .await?;
-
-    Ok(())
+    .await
+    {
+        log::error!("Server failed with: {}", e);
+    }
 }
 
 fn main() -> Result<()> {
@@ -90,21 +61,11 @@ fn main() -> Result<()> {
 
     let spicy = nailspicy::get_spicy_payload(&config);
 
-    let rt = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(
-            std::thread::available_parallelism()?
-                .get()
-                .min(config.server.worker_threads),
-        )
-        .enable_all()
-        .build()?;
+    let config = Arc::new(config);
 
-    rt.block_on(nailpit_main(Arc::new(config), inputs, spicy))?;
-
-    log::info!("Waiting for background tasks to complete...");
-
-    // Wait at most 60 seconds for remaining background tasks to complete
-    rt.shutdown_timeout(Duration::from_secs(60));
+    nailpit::runtime::start_tokio(config.clone(), move |shutdown| {
+        nailpit_main(config.clone(), inputs.clone(), spicy.clone(), shutdown)
+    });
 
     log::info!("Everything shutdown gracefully. Good night :)");
 

@@ -11,13 +11,43 @@ use hashbrown::HashMap;
 use indexmap::IndexMap;
 use interner::Interner;
 use itertools::Itertools;
-use rand::{RngCore, seq::IteratorRandom};
+use nailrng::FastRng;
+use rand::{seq::IteratorRandom, RngCore};
 use rand_distr::Distribution;
 
 use distribution::{TokenWeights, TokenWeightsBuilder};
-use rapidhash::fast::RandomState;
+use rustc_hash::FxHasher;
 use token::{Token, TokenPair};
 use unicode_segmentation::UnicodeSegmentation;
+
+#[derive(Clone)]
+pub struct RandomState {
+    seed: usize,
+}
+
+impl RandomState {
+    fn new() -> Self {
+        let mut rng = FastRng::default();
+
+        Self {
+            seed: rng.next_u64() as usize,
+        }
+    }
+}
+
+impl Default for RandomState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl core::hash::BuildHasher for RandomState {
+    type Hasher = FxHasher;
+    
+    fn build_hasher(&self) -> Self::Hasher {
+        FxHasher::with_seed(self.seed)
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct NailKov {
@@ -130,7 +160,7 @@ impl NailBuilder {
                 builder.add(next.into());
             }
             None => {
-                let mut builder = TokenWeightsBuilder::new(*self.chain.hasher());
+                let mut builder = TokenWeightsBuilder::new(self.chain.hasher().clone());
                 builder.add(next.into());
                 self.chain.insert(prev, builder);
             }

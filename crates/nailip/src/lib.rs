@@ -15,6 +15,15 @@ mod maybe_header;
 #[repr(align(8))]
 pub struct IdentifiedPeer(IpAddr);
 
+impl core::hash::Hash for IdentifiedPeer {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        match self.0 {
+            IpAddr::V4(a) => a.to_bits().hash(state),
+            IpAddr::V6(aaaa) => aaaa.to_bits().hash(state),
+        }
+    }
+}
+
 impl IdentifiedPeer {
     fn extract(headers: &HeaderMap, connection: &ConnectInfo<SocketAddr>) -> Self {
         Self(
