@@ -2,6 +2,7 @@
 use std::{net::SocketAddr, sync::Arc};
 
 use color_eyre::Result;
+use nailpit::app::App;
 
 #[cfg(feature = "mimalloc")]
 #[global_allocator]
@@ -9,7 +10,7 @@ static GLOBAL: mimalloc_safe::MiMalloc = mimalloc_safe::MiMalloc;
 
 async fn spawn_axum_server<F>(
     state: nailstate::ServerState,
-    spicy: Option<nailspicy::SpicyPayloads>,
+    spicy: Option<Arc<nailspicy::SpicyPayloads>>,
     shutdown: F,
 ) -> Result<()>
 where
@@ -33,17 +34,12 @@ where
     Ok(())
 }
 
-async fn nailpit_main(
-    config: Arc<nailconfig::NailConfig>,
-    inputs: Arc<[nailgen::MarkovGen]>,
-    spicy: Option<nailspicy::SpicyPayloads>,
-    shutdown_notifier: Arc<tokio::sync::watch::Sender<()>>,
-) {
-    let state = nailstate::ServerState::new(config, inputs);
+async fn nailpit_worker_main(app: App, shutdown_notifier: Arc<tokio::sync::watch::Sender<()>>) {
+    let state = nailstate::ServerState::new(app.config, app.inputs);
 
     if let Err(e) = spawn_axum_server(
         state,
-        spicy,
+        app.spicy,
         nailpit::shutdown::wait_for_shutdown(shutdown_notifier),
     )
     .await
@@ -55,17 +51,13 @@ async fn nailpit_main(
 fn main() -> Result<()> {
     color_eyre::install()?;
 
-    let config: nailconfig::NailConfig = nailconfig::get_configuration()?;
+    let config = nailconfig::get_configuration().map(Arc::new)?;
 
-    let inputs = nailpit::inputs::get_input_files(&config)?;
+    let inputs = nailpit::inputs::get_input_files(config.as_ref())?;
 
-    let spicy = nailspicy::get_spicy_payload(&config);
+    let spicy = nailspicy::get_spicy_payload(config.as_ref()).map(Arc::new);
 
-    let config = Arc::new(config);
-
-    nailpit::runtime::start_tokio(config.clone(), move |shutdown| {
-        nailpit_main(config.clone(), inputs.clone(), spicy.clone(), shutdown)
-    });
+    nailpit::runtime::start(App::new(config, inputs, spicy), nailpit_worker_main)?;
 
     log::info!("Everything shutdown gracefully. Good night :)");
 

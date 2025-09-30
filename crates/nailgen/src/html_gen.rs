@@ -33,7 +33,13 @@ fn text_generator<'a>(
         .take(size)
 }
 
-pub fn initial_content(chain: &NailKov, config: &NailConfig, rng: &mut impl RngCore, buf_mut: &mut BytesMut) {
+#[fastrace::trace]
+pub fn initial_content(
+    chain: &NailKov,
+    config: &NailConfig,
+    rng: &mut impl RngCore,
+    buf_mut: &mut BytesMut,
+) {
     let interner = INTERNER.read();
 
     buf_mut.extend_from_slice(
@@ -81,7 +87,58 @@ pub fn initial_content(chain: &NailKov, config: &NailConfig, rng: &mut impl RngC
     }
 }
 
-pub fn paragraph<'a>(
+#[fastrace::trace]
+pub fn main_content(chain: &NailKov, config: &NailConfig, rng: &mut impl RngCore) -> Bytes {
+    // Allocate more than we need, as we might generate more tokens than our 4kB threshold
+    let mut buffer = BytesMut::with_capacity(config.generator.chunk_size * 2);
+
+    let interner = INTERNER.read();
+
+    loop {
+        // Randomise how many paragraphs we want per section
+        let max_paras: u32 = rng.random_range(1..=4);
+
+        buffer.extend(header(&interner, chain, config.generator.header_size, rng));
+
+        for _ in 0..max_paras {
+            buffer.extend(paragraph(
+                &interner,
+                chain,
+                get_desired_size(config, rng),
+                rng,
+            ));
+        }
+
+        // We can generate more before handing it off to be streamed to the client,
+        // A bit more latency, but much more throughput, and friendlier to being compressed.
+        if buffer.len() >= config.generator.chunk_size {
+            return buffer.freeze();
+        }
+    }
+}
+
+#[fastrace::trace]
+pub fn footer(route: &str, prompts: &[String], max_links: usize, rng: &mut impl RngCore) -> Bytes {
+    let mut footer = BytesMut::with_capacity(512);
+
+    if let Some(prompt) = match prompts.len() {
+        0 => None,
+        1 => prompts.first(),
+        _ => prompts.choose(rng),
+    } {
+        footer.extend_from_slice(b"<p>");
+        footer.extend_from_slice(prompt.as_bytes());
+        footer.extend_from_slice(b"</p>");
+    }
+
+    footer.extend_from_slice(b"</article></main>\n<footer>");
+    links(route, max_links, rng, &mut footer);
+    footer.extend_from_slice(b"</footer>\n</body>\n</html>");
+
+    footer.freeze()
+}
+
+fn paragraph<'a>(
     interner: &'a Interner,
     chain: &'a NailKov,
     size: usize,
@@ -93,7 +150,7 @@ pub fn paragraph<'a>(
         .flatten()
 }
 
-pub fn header<'a>(
+fn header<'a>(
     interner: &'a Interner,
     chain: &'a NailKov,
     size: usize,
@@ -105,7 +162,7 @@ pub fn header<'a>(
         .flatten()
 }
 
-pub fn links<'a>(
+fn links<'a>(
     route: &str,
     max_links: usize,
     rng: &'a mut impl RngCore,
@@ -126,24 +183,4 @@ pub fn links<'a>(
     }
 
     buf_mut.extend_from_slice(b"</ul></nav>");
-}
-
-pub fn footer(route: &str, prompts: &[String], max_links: usize, rng: &mut impl RngCore) -> Bytes {
-    let mut footer = BytesMut::with_capacity(512);
-
-    if let Some(prompt) = match prompts.len() {
-        0 => None,
-        1 => prompts.first(),
-        _ => prompts.choose(rng),
-    } {
-        footer.extend_from_slice(b"<p>");
-        footer.extend_from_slice(prompt.as_bytes());
-        footer.extend_from_slice(b"</p>");
-    }
-
-    footer.extend_from_slice(b"</article></main>\n<footer>");
-    links(route, max_links, rng, &mut footer);
-    footer.extend_from_slice(b"</footer>\n</body>\n</html>");
-
-    footer.freeze()
 }

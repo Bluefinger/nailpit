@@ -2,6 +2,7 @@
 //! [`NailConfig`] struct, as well as the utility method to derive the config object
 //! from various `toml` files.
 
+use core::num::NonZero;
 use std::ops::Deref;
 
 use color_eyre::Result;
@@ -36,7 +37,7 @@ impl Deref for PromptsList {
 pub struct ServerConfig {
     pub pit_routes: Vec<String>,
     pub socket_addr: String,
-    pub worker_threads: usize,
+    pub worker_threads: NonZero<usize>,
 }
 
 #[derive(Debug, serde::Deserialize)]

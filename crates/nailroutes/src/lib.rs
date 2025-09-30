@@ -46,7 +46,7 @@ async fn generated(config: AppConfig, input: NailInputs, path: NestedPath) -> Na
 pub fn nail_app(
     routes: Router,
     state: ServerState,
-    spicy_payload: Option<SpicyPayloads>,
+    spicy_payload: Option<Arc<SpicyPayloads>>,
 ) -> Router {
     routes
         .layer(
@@ -58,7 +58,7 @@ pub fn nail_app(
                 .layer(CompressionLayer::new().quality(CompressionLevel::Default))
                 .layer(NailRaterLayer::new(
                     state.config.rate_limiting.clone(),
-                    spicy_payload.map(Arc::new),
+                    spicy_payload,
                 ))
                 .propagate_x_request_id(),
         )
