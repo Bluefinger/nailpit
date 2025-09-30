@@ -29,8 +29,8 @@ fn text_generator<'a>(
 ) -> impl Iterator<Item = &'a [u8]> + 'a {
     chain
         .generate_tokens(rng)
-        .flat_map(|token| interner.lookup_bytes(token))
         .take(size)
+        .flat_map(|token| interner.lookup_bytes(token))
 }
 
 #[fastrace::trace]
@@ -118,21 +118,23 @@ pub fn main_content(chain: &NailKov, config: &NailConfig, rng: &mut impl RngCore
 }
 
 #[fastrace::trace]
-pub fn footer(route: &str, prompts: &[String], max_links: usize, rng: &mut impl RngCore) -> Bytes {
+pub fn footer(chain: &NailKov, route: &str, config: &NailConfig, rng: &mut impl RngCore) -> Bytes {
     let mut footer = BytesMut::with_capacity(512);
 
-    if let Some(prompt) = match prompts.len() {
+    if let Some(prompt) = match config.generator.prompts.len() {
         0 => None,
-        1 => prompts.first(),
-        _ => prompts.choose(rng),
+        1 => config.generator.prompts.first(),
+        _ => config.generator.prompts.choose(rng),
     } {
         footer.extend_from_slice(b"<p>");
         footer.extend_from_slice(prompt.as_bytes());
         footer.extend_from_slice(b"</p>");
     }
 
+    let interner = INTERNER.read();
+
     footer.extend_from_slice(b"</article></main>\n<footer>");
-    links(route, max_links, rng, &mut footer);
+    links(&interner, chain, route, config.generator.max_pit_links, rng, &mut footer);
     footer.extend_from_slice(b"</footer>\n</body>\n</html>");
 
     footer.freeze()
@@ -163,6 +165,8 @@ fn header<'a>(
 }
 
 fn links<'a>(
+    interner: &'a Interner,
+    chain: &'a NailKov,
     route: &str,
     max_links: usize,
     rng: &'a mut impl RngCore,
@@ -178,7 +182,7 @@ fn links<'a>(
         buf_mut.extend_from_slice(b"/");
         buf_mut.extend(rng.sample_iter(Alphanumeric).take(16));
         buf_mut.extend_from_slice(b"\">");
-        buf_mut.extend(rng.sample_iter(Alphanumeric).take(4));
+        buf_mut.extend(text_generator(interner, chain, 8, rng).flatten());
         buf_mut.extend_from_slice(b"</a></li>");
     }
 

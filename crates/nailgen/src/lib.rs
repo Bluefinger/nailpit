@@ -126,9 +126,9 @@ impl Stream for MarkovStream {
                 }
                 GeneratorState::Footer => {
                     let content = footer(
+                        this.markov.chain.as_ref(),
                         this.path.as_str(),
-                        &this.config.generator.prompts,
-                        this.config.generator.max_pit_links,
+                        this.config,
                         this.rng,
                     );
 
