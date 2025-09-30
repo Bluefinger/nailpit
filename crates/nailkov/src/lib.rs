@@ -11,13 +11,43 @@ use hashbrown::HashMap;
 use indexmap::IndexMap;
 use interner::Interner;
 use itertools::Itertools;
-use rand::{RngCore, seq::IteratorRandom};
+use nailrng::FastRng;
+use rand::{seq::IteratorRandom, RngCore};
 use rand_distr::Distribution;
 
 use distribution::{TokenWeights, TokenWeightsBuilder};
-use rapidhash::fast::RandomState;
+use rustc_hash::FxHasher;
 use token::{Token, TokenPair};
 use unicode_segmentation::UnicodeSegmentation;
+
+#[derive(Clone)]
+pub struct RandomState {
+    seed: usize,
+}
+
+impl RandomState {
+    fn new() -> Self {
+        let mut rng = FastRng::default();
+
+        Self {
+            seed: rng.next_u64() as usize,
+        }
+    }
+}
+
+impl Default for RandomState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl core::hash::BuildHasher for RandomState {
+    type Hasher = FxHasher;
+    
+    fn build_hasher(&self) -> Self::Hasher {
+        FxHasher::with_seed(self.seed)
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct NailKov {
@@ -76,18 +106,8 @@ impl NailKov {
     }
 }
 
-impl NailKov {
-    pub fn from_input_with_hasher(
-        interner: &mut Interner,
-        input: &str,
-        hasher: RandomState,
-    ) -> Result<NailKov, NailError> {
-        NailBuilder::new(hasher).with_input(interner, input)
-    }
-}
-
 struct NailBuilder {
-    chain: IndexMap<TokenPair, TokenWeightsBuilder<RandomState>, RandomState>,
+    chain: IndexMap<TokenPair, TokenWeightsBuilder, RandomState>,
 }
 
 impl NailBuilder {
@@ -117,21 +137,21 @@ impl NailBuilder {
             .collect();
 
         if chain.is_empty() {
-            return Err(NailError::BuildError);
+            return Err(NailError::EmptyInput);
         }
 
         Ok(NailKov { chain })
     }
 
     /// Add the occurrence of `next` following `prev`.
-    fn add_token_pair(&mut self, prev: TokenPair, next: impl Into<Token>) {
+    fn add_token_pair(&mut self, prev: TokenPair, next: Token) {
         match self.chain.get_mut(&prev) {
             Some(builder) => {
-                builder.add(next.into());
+                builder.add(next);
             }
             None => {
-                let mut builder = TokenWeightsBuilder::new(*self.chain.hasher());
-                builder.add(next.into());
+                let mut builder = TokenWeightsBuilder::new(self.chain.hasher().clone());
+                builder.add(next);
                 self.chain.insert(prev, builder);
             }
         }

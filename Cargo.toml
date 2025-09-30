@@ -116,6 +116,7 @@ logforth.workspace = true
 futures-concurrency = "7.6.3"
 glob = "0.3.2"
 mimalloc-safe = { version = "0.1.50", optional = true }
+socket2 = "0.6.0"
 
 [profile.release]
 codegen-units = 1

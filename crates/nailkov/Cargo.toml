@@ -11,7 +11,9 @@ license.workspace = true
 workspace = true
 
 [dependencies]
+nailrng = { path = "../nailrng" }
 rapidhash = { workspace = true, features = ["rand", "unsafe"] }
+rustc-hash = { version = "2.1.1", default-features = false }
 hashbrown.workspace = true
 rand.workspace = true
 rand_distr.workspace = true
