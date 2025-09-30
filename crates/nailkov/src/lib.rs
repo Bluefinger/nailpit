@@ -106,16 +106,6 @@ impl NailKov {
     }
 }
 
-impl NailKov {
-    pub fn from_input_with_hasher(
-        interner: &mut Interner,
-        input: &str,
-        hasher: RandomState,
-    ) -> Result<NailKov, NailError> {
-        NailBuilder::new(hasher).with_input(interner, input)
-    }
-}
-
 struct NailBuilder {
     chain: IndexMap<TokenPair, TokenWeightsBuilder, RandomState>,
 }
@@ -154,14 +144,14 @@ impl NailBuilder {
     }
 
     /// Add the occurrence of `next` following `prev`.
-    fn add_token_pair(&mut self, prev: TokenPair, next: impl Into<Token>) {
+    fn add_token_pair(&mut self, prev: TokenPair, next: Token) {
         match self.chain.get_mut(&prev) {
             Some(builder) => {
-                builder.add(next.into());
+                builder.add(next);
             }
             None => {
                 let mut builder = TokenWeightsBuilder::new(self.chain.hasher().clone());
-                builder.add(next.into());
+                builder.add(next);
                 self.chain.insert(prev, builder);
             }
         }
