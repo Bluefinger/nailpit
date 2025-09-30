@@ -23,7 +23,6 @@ axum = { version = "0.8.1", default-features = false, features = [
 axum-core = { version = "0.5.0", default-features = false }
 bytes = "1.10.1"
 hyper = { version = "1.6.0", default-features = false, features = ["server"] }
-hyper-util = { version = "0.1.17", features = ["tokio", "server"] }
 color-eyre = { version = "0.6.3", default-features = false }
 log = { version = "0.4.27", features = ["std"] }
 serde = { version = "1.0.219", features = ["derive"] }
@@ -115,9 +114,6 @@ log.workspace = true
 fastrace.workspace = true
 logforth.workspace = true
 futures-concurrency = "7.6.3"
-hyper.workspace = true
-hyper-util.workspace = true
-tower.workspace = true
 glob = "0.3.2"
 mimalloc-safe = { version = "0.1.50", optional = true }
 socket2 = "0.6.0"

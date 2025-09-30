@@ -1,13 +1,11 @@
 //! [`TokenWeights`] are representations of how common [`Token`]s are, and are paired up with
 //! a [`TokenPair`](crate::token::TokenPair) in a [`NailKov`](crate::NailKov).
 
-use core::hash::BuildHasher;
 use indexmap::IndexMap;
 use rand::Rng;
 use rand_distr::{Distribution, weighted::WeightedAliasIndex};
-use rapidhash::fast::RandomState;
 
-use crate::{error::NailError, token::Token};
+use crate::{error::NailError, token::Token, RandomState};
 
 /// A distribution of choices and their likelihood.
 #[derive(Clone, Debug)]
@@ -28,13 +26,13 @@ impl Distribution<Token> for TokenWeights {
 
 /// Builder for [`TokenWeights`].
 #[derive(Clone, Debug)]
-pub struct TokenWeightsBuilder<S = RandomState> {
+pub struct TokenWeightsBuilder {
     /// Counts how many times a token is likely to appear.
-    occurrences: IndexMap<Token, u64, S>,
+    occurrences: IndexMap<Token, u64, RandomState>,
 }
 
-impl<S: BuildHasher> TokenWeightsBuilder<S> {
-    pub fn new(hasher: S) -> Self {
+impl TokenWeightsBuilder {
+    pub fn new(hasher: RandomState) -> Self {
         Self {
             occurrences: IndexMap::with_hasher(hasher),
         }
@@ -49,7 +47,7 @@ impl<S: BuildHasher> TokenWeightsBuilder<S> {
         }
 
         Ok(TokenWeights {
-            dist: WeightedAliasIndex::new(counts).map_err(|_| NailError::BuildError)?,
+            dist: WeightedAliasIndex::new(counts)?,
             choices: choices.into(),
         })
     }
@@ -63,7 +61,7 @@ impl<S: BuildHasher> TokenWeightsBuilder<S> {
     }
 }
 
-impl Default for TokenWeightsBuilder<RandomState> {
+impl Default for TokenWeightsBuilder {
     fn default() -> Self {
         Self::new(RandomState::new())
     }

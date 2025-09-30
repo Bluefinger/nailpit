@@ -117,7 +117,7 @@ impl NailKov {
 }
 
 struct NailBuilder {
-    chain: IndexMap<TokenPair, TokenWeightsBuilder<RandomState>, RandomState>,
+    chain: IndexMap<TokenPair, TokenWeightsBuilder, RandomState>,
 }
 
 impl NailBuilder {
@@ -147,7 +147,7 @@ impl NailBuilder {
             .collect();
 
         if chain.is_empty() {
-            return Err(NailError::BuildError);
+            return Err(NailError::EmptyInput);
         }
 
         Ok(NailKov { chain })
