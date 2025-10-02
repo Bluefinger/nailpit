@@ -8,44 +8,24 @@ use nailpit::app::App;
 #[global_allocator]
 static GLOBAL: mimalloc_safe::MiMalloc = mimalloc_safe::MiMalloc;
 
-async fn spawn_axum_server<F>(
-    state: nailstate::ServerState,
-    spicy: Option<Arc<nailspicy::SpicyPayloads>>,
-    shutdown: F,
-) -> Result<()>
-where
-    F: Future<Output = ()> + Send + 'static,
-{
+async fn spawn_axum_worker(
+    app: App,
+    shutdown_notifier: Arc<tokio::sync::watch::Sender<()>>,
+) -> Result<()> {
+    let state = nailstate::ServerState::new(app.config, app.inputs);
     let listener = nailpit::net::get_tcp_socket(&state.config.server.socket_addr)?;
 
     log::info!("worker listening on http://{}", listener.local_addr()?);
 
-    tokio::spawn(
-        axum::serve(
-            listener,
-            nailroutes::nail_app(nailroutes::nail_route(state.clone()), state, spicy)
-                .into_make_service_with_connect_info::<SocketAddr>(),
-        )
-        .with_graceful_shutdown(shutdown)
-        .into_future(),
+    axum::serve(
+        listener,
+        nailroutes::nail_app(nailroutes::nail_route(state.clone()), state, app.spicy)
+            .into_make_service_with_connect_info::<SocketAddr>(),
     )
-    .await??;
+    .with_graceful_shutdown(nailpit::shutdown::wait_for_shutdown(shutdown_notifier))
+    .await?;
 
     Ok(())
-}
-
-async fn nailpit_worker_main(app: App, shutdown_notifier: Arc<tokio::sync::watch::Sender<()>>) {
-    let state = nailstate::ServerState::new(app.config, app.inputs);
-
-    if let Err(e) = spawn_axum_server(
-        state,
-        app.spicy,
-        nailpit::shutdown::wait_for_shutdown(shutdown_notifier),
-    )
-    .await
-    {
-        log::error!("Server failed with: {}", e);
-    }
 }
 
 fn main() -> Result<()> {
@@ -57,7 +37,7 @@ fn main() -> Result<()> {
 
     let spicy = nailspicy::get_spicy_payload(config.as_ref()).map(Arc::new);
 
-    nailpit::runtime::start(App::new(config, inputs, spicy), nailpit_worker_main)?;
+    nailpit::runtime::start(App::new(config, inputs, spicy), spawn_axum_worker)?;
 
     log::info!("Everything shutdown gracefully. Good night :)");
 

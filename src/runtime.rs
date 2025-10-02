@@ -1,14 +1,12 @@
 use core::time::Duration;
 use std::sync::Arc;
 
-use futures_concurrency::future::Join;
-
 use crate::app::App;
 
-pub fn start<Fut, F>(app: App, main_fn: F) -> std::io::Result<()>
+pub fn start<Fut, F>(app: App, main_fn: F) -> color_eyre::Result<()>
 where
-    Fut: Future<Output = ()>,
-    F: Fn(App, Arc<tokio::sync::watch::Sender<()>>) -> Fut + Clone + Send + 'static,
+    Fut: Future<Output = color_eyre::Result<()>>,
+    F: Fn(App, Arc<tokio::sync::watch::Sender<()>>) -> Fut + Clone + Sync + Send,
 {
     let workers = std::thread::available_parallelism()?.min(app.config.server.worker_threads);
 
@@ -21,44 +19,56 @@ where
         .enable_all()
         .build()?;
 
-    for num in 1..workers.get() {
-        let cloned = main_fn.clone();
-        let app = app.clone();
-        let shutdown_notifier = shutdown_notifier.clone();
+    std::thread::scope(|s| {
+        for num in 1..workers.get() {
+            let cloned = &main_fn;
+            let app = &app;
+            let shutdown_notifier = &shutdown_notifier;
 
-        // If any worker threads fail to be created, the program will terminate. If the
-        // runtime within the worker thread fails to be created, this won't terminate the
-        // program, but the error will get logged.
-        std::thread::Builder::new()
-            .name(format!("Nailpit worker {num}"))
-            .spawn(move || {
-                match tokio::runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .build()
-                {
-                    Ok(rt) => {
-                        rt.block_on(cloned(app, shutdown_notifier));
+            // If any worker threads fail to be created, the program will terminate. If the
+            // runtime within the worker thread fails to be created, this won't terminate the
+            // program, but the error will get logged.
+            std::thread::Builder::new()
+                .name(format!("Nailpit worker {num}"))
+                .spawn_scoped(s, move || {
+                    match tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                    {
+                        Ok(rt) => {
+                            // If we hit an application error case, restart the worker
+                            while let Err(e) =
+                                rt.block_on(cloned(app.clone(), shutdown_notifier.clone()))
+                            {
+                                log::error!("Worker {num} failed with: {e}");
+                                // Wait a moment before trying again
+                                std::thread::sleep(Duration::from_secs(1));
+                                log::info!("Restarting Worker {num}...");
+                            }
 
-                        rt.shutdown_timeout(Duration::from_secs(60));
+                            rt.shutdown_timeout(Duration::from_secs(60));
+                        }
+                        Err(e) => log::error!("Worker {num} failed to start: {e}"),
                     }
-                    Err(e) => log::error!("Worker {} failed to start: {}", num, e),
-                }
-            })?;
-    }
+                })?;
+        }
 
-    rt.block_on(async move {
-        crate::telemetry::init_telemetry(app.config.clone());
+        rt.block_on(async {
+            crate::telemetry::init_telemetry(app.config.clone());
 
-        let app_fut = main_fn(app, shutdown_notifier);
+            let handle = tokio::spawn(crate::shutdown::shutdown_task(shutdown_signal));
 
-        let sig_watch = async move {
-            if let Err(e) = crate::shutdown::shutdown_task(shutdown_signal).await {
-                log::error!("SIG error: {}", e);
+            // If we hit an application error case, restart the worker.
+            while let Err(e) = main_fn(app.clone(), shutdown_notifier.clone()).await {
+                log::error!("Worker 0 failed with {e}");
+                // Wait a moment before trying again
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                log::info!("Restarting Worker 0...");
             }
-        };
 
-        (sig_watch, app_fut).join().await;
-    });
+            handle.await?
+        })
+    })?;
 
     log::info!("Waiting for background tasks to complete...");
 
