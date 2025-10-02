@@ -5,7 +5,7 @@ use crate::app::App;
 
 pub fn start<Fut, F>(app: App, main_fn: F) -> color_eyre::Result<()>
 where
-    Fut: Future<Output = color_eyre::Result<()>> + Send,
+    Fut: Future<Output = color_eyre::Result<()>>,
     F: Fn(App, Arc<tokio::sync::watch::Sender<()>>) -> Fut + Clone + Sync + Send,
 {
     let workers = std::thread::available_parallelism()?.min(app.config.server.worker_threads);
