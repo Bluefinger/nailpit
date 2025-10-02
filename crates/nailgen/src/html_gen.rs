@@ -1,5 +1,3 @@
-use std::iter::once;
-
 use bytes::{Bytes, BytesMut};
 use nailconfig::NailConfig;
 use nailkov::{NailKov, interner::Interner};
@@ -26,11 +24,13 @@ fn text_generator<'a>(
     chain: &'a NailKov,
     size: usize,
     rng: &'a mut impl RngCore,
-) -> impl Iterator<Item = &'a [u8]> + 'a {
+) -> impl Iterator<Item = &'a u8> + 'a {
     chain
         .generate_tokens(rng)
         .take(size)
-        .flat_map(|token| interner.lookup_bytes(token))
+        .filter_map(|token| interner.lookup_bytes(token))
+        .flatten()
+        .skip_while(|&text| !text.is_ascii_alphabetic())
 }
 
 #[fastrace::trace]
@@ -50,13 +50,10 @@ pub fn initial_content(
         .as_bytes(),
     );
 
-    let title_text: Vec<u8> = text_generator(&interner, chain, 24, rng)
-        .flatten()
-        .copied()
-        .collect();
+    let title_text: Vec<u8> = text_generator(&interner, chain, 24, rng).copied().collect();
 
     buf_mut.extend_from_slice(b"<title>");
-    buf_mut.extend_from_slice(&title_text);
+    buf_mut.extend_from_slice(title_text.as_slice());
     buf_mut.extend_from_slice(b"</title>\n");
 
     buf_mut.extend_from_slice(
@@ -131,10 +128,15 @@ pub fn footer(chain: &NailKov, route: &str, config: &NailConfig, rng: &mut impl 
         footer.extend_from_slice(b"</p>");
     }
 
-    let interner = INTERNER.read();
-
     footer.extend_from_slice(b"</article></main>\n<footer>");
-    links(&interner, chain, route, config.generator.max_pit_links, rng, &mut footer);
+    links(
+        &INTERNER.read(),
+        chain,
+        route,
+        config.generator.max_pit_links,
+        rng,
+        &mut footer,
+    );
     footer.extend_from_slice(b"</footer>\n</body>\n</html>");
 
     footer.freeze()
@@ -146,10 +148,10 @@ fn paragraph<'a>(
     size: usize,
     rng: &'a mut impl RngCore,
 ) -> impl Iterator<Item = &'a u8> + 'a {
-    once(b"<p>".as_slice())
+    b"<p>"
+        .iter()
         .chain(text_generator(interner, chain, size, rng))
-        .chain(once(b"</p>\n".as_slice()))
-        .flatten()
+        .chain(b"</p>\n")
 }
 
 fn header<'a>(
@@ -158,10 +160,10 @@ fn header<'a>(
     size: usize,
     rng: &'a mut impl RngCore,
 ) -> impl Iterator<Item = &'a u8> + 'a {
-    once(b"\n<h2>".as_slice())
+    b"\n<h2>"
+        .iter()
         .chain(text_generator(interner, chain, size, rng))
-        .chain(once(b"</h2>\n".as_slice()))
-        .flatten()
+        .chain(b"</h2>\n")
 }
 
 fn links<'a>(
@@ -182,7 +184,7 @@ fn links<'a>(
         buf_mut.extend_from_slice(b"/");
         buf_mut.extend(rng.sample_iter(Alphanumeric).take(16));
         buf_mut.extend_from_slice(b"\">");
-        buf_mut.extend(text_generator(interner, chain, 8, rng).flatten());
+        buf_mut.extend(text_generator(interner, chain, 8, rng));
         buf_mut.extend_from_slice(b"</a></li>");
     }
 
