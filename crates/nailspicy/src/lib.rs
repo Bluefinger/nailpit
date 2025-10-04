@@ -1,7 +1,7 @@
 use hyper::{HeaderMap, body::Bytes, header::ACCEPT_ENCODING};
 use nailconfig::{DropBehavior, NailConfig, RateLimitingConfig};
-use scc::HashIndex;
 use rapidhash::fast::RandomState;
+use scc::HashIndex;
 
 pub type SpicyPayloads = HashIndex<SpicyPayloadKind, Bytes, RandomState>;
 

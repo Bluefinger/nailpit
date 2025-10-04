@@ -1,14 +1,19 @@
-use std::sync::{Arc, LazyLock};
+use std::sync::Arc;
 
-use axum::{Router, extract::NestedPath, http::HeaderValue, response::Html, routing::get};
+use axum::{
+    Router,
+    extract::NestedPath,
+    response::{Html, IntoResponse},
+    routing::get,
+};
 use fastrace::Span;
 use fastrace_futures::StreamExt;
-use hyper::{HeaderMap, StatusCode, header::CONTENT_TYPE};
+use hyper::StatusCode;
 use nailip::identify_peer;
 use nailrater::NailRaterLayer;
 use nailspicy::SpicyPayloads;
 use nailstate::{AppConfig, NailInputs, ServerState};
-use nailstream::NailStream;
+use nailstream::NailResponseStream;
 use nailtrace::tracing_root_span;
 use tower::ServiceBuilder;
 use tower_http::{
@@ -18,29 +23,19 @@ use tower_http::{
 
 static INDEX: &str = include_str!("../../../templates/warning.html");
 
-static GEN_HEADER: LazyLock<HeaderMap> = LazyLock::new(|| {
-    let mut headers = HeaderMap::new();
-    headers.append(
-        CONTENT_TYPE,
-        HeaderValue::from_static("text/html; charset=utf-8"),
-    );
-    headers
-});
-
 #[fastrace::trace]
 async fn index() -> Html<&'static str> {
     Html(INDEX)
 }
 
 #[fastrace::trace]
-async fn generated(config: AppConfig, input: NailInputs, path: NestedPath) -> NailStream {
-    NailStream::from_stream(
+async fn generated(config: AppConfig, input: NailInputs, path: NestedPath) -> impl IntoResponse {
+    NailResponseStream::from_stream(
         input
             .get_random_input()
-            .into_stream(path, config.clone_inner())
+            .into_frame_stream(path, config.clone_inner(), input.get_interner())
             .in_span(Span::enter_with_local_parent("Nailstream")),
     )
-    .headers(GEN_HEADER.clone())
 }
 
 pub fn nail_app(

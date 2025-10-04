@@ -20,9 +20,9 @@ use modes::LimitModes;
 use nailconfig::RateLimitingConfig;
 use nailip::IdentifiedPeer;
 use nailspicy::{SpicyPayloadKind, SpicyPayloads};
+use rapidhash::fast::RandomState;
 use scc::HashMap;
 use tokio::time::sleep;
-use rapidhash::fast::RandomState;
 
 const SOURCE_TIMEOUT: Duration = Duration::from_secs(60 * 2);
 

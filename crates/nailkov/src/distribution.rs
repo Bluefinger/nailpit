@@ -5,7 +5,7 @@ use indexmap::IndexMap;
 use rand::Rng;
 use rand_distr::{Distribution, weighted::WeightedAliasIndex};
 
-use crate::{error::NailError, token::Token, RandomState};
+use crate::{RandomState, error::NailError, token::Token};
 
 /// A distribution of choices and their likelihood.
 #[derive(Clone, Debug)]

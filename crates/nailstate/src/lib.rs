@@ -3,46 +3,44 @@ use std::{convert::Infallible, ops::Deref, sync::Arc};
 use axum::extract::{FromRef, FromRequestParts};
 use nailconfig::NailConfig;
 use nailgen::MarkovGen;
+use nailkov::interner::Interner;
 use nailrng::FastRng;
 use rand::seq::IndexedRandom;
 
 /// Smart pointer for all available Markov chains.
 #[derive(Clone)]
-pub struct NailInputs(Arc<[MarkovGen]>);
+pub struct NailInputs {
+    chains: Arc<[MarkovGen]>,
+    interner: Arc<Interner>,
+}
 
 impl NailInputs {
+    pub fn new(chains: Arc<[MarkovGen]>, interner: Arc<Interner>) -> Self {
+        Self { chains, interner }
+    }
+
     /// Pulls a random markov chain from the available list. Returns a cloned
     /// pointer to the selected chain.
     pub fn get_random_input(&self) -> MarkovGen {
-        assert!(!self.0.is_empty());
+        assert!(!self.chains.is_empty());
 
-        if self.0.len() == 1 {
-            self.0[0].clone()
+        if self.chains.len() == 1 {
+            self.chains[0].clone()
         } else {
             let mut rng = FastRng::default();
 
-            self.0.choose(&mut rng).unwrap().clone()
+            self.chains.choose(&mut rng).unwrap().clone()
         }
+    }
+
+    pub fn get_interner(&self) -> Arc<Interner> {
+        self.interner.clone()
     }
 }
 
 impl std::fmt::Debug for NailInputs {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_tuple("NailInputs").finish_non_exhaustive()
-    }
-}
-
-impl From<Arc<[MarkovGen]>> for NailInputs {
-    fn from(value: Arc<[MarkovGen]>) -> Self {
-        Self(value)
-    }
-}
-
-impl Deref for NailInputs {
-    type Target = [MarkovGen];
-
-    fn deref(&self) -> &Self::Target {
-        self.0.as_ref()
     }
 }
 
@@ -77,12 +75,16 @@ pub struct ServerState {
 }
 
 impl ServerState {
-    pub fn new(config: impl Into<AppConfig>, inputs: impl Into<NailInputs>) -> Self {
+    pub fn new(
+        config: impl Into<AppConfig>,
+        chains: Arc<[MarkovGen]>,
+        interner: Arc<Interner>,
+    ) -> Self {
         let config = config.into();
 
         Self {
             config,
-            inputs: inputs.into(),
+            inputs: NailInputs { chains, interner },
         }
     }
 }
