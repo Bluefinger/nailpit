@@ -156,7 +156,7 @@ pub fn footer(interner: &Interner, chain: &NailKov, route: &str, config: &NailCo
 
     footer.extend_from_slice(b"</article></main>\n<footer>");
     links(
-        &interner,
+        interner,
         chain,
         route,
         config.generator.max_pit_links,
