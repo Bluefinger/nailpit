@@ -1,9 +1,10 @@
+use std::sync::Arc;
+
 use bytes::{Bytes, BytesMut};
 use nailconfig::NailConfig;
 use nailkov::{NailKov, interner::Interner};
+use nailrng::FastRng;
 use rand::{Rng, RngCore, distr::Alphanumeric, seq::IndexedRandom};
-
-use crate::INTERNER;
 
 /// Provides either the minimum configured size, or a randomised value between
 /// the minimum and maximum configured sizes if a maximum is available.
@@ -33,15 +34,14 @@ fn text_generator<'a>(
         .skip_while(|&text| !text.is_ascii_alphabetic())
 }
 
-#[fastrace::trace]
-pub fn initial_content(
-    chain: &NailKov,
-    config: &NailConfig,
-    rng: &mut impl RngCore,
-    buf_mut: &mut BytesMut,
-) {
-    let interner = INTERNER.read();
-
+#[fastrace::trace(enter_on_poll = true)]
+pub async fn initial_content(
+    interner: Arc<Interner>,
+    chain: Arc<NailKov>,
+    config: Arc<NailConfig>,
+) -> Bytes {
+    let mut buf_mut = BytesMut::with_capacity(2048);
+    let mut rng = FastRng::default();
     buf_mut.extend_from_slice(
         r#"<!DOCTYPE html>
 <html lang="en">
@@ -50,7 +50,9 @@ pub fn initial_content(
         .as_bytes(),
     );
 
-    let title_text: Vec<u8> = text_generator(&interner, chain, 24, rng).copied().collect();
+    let title_text: Vec<u8> = text_generator(&interner, &chain, 24, &mut rng)
+        .copied()
+        .collect();
 
     buf_mut.extend_from_slice(b"<title>");
     buf_mut.extend_from_slice(title_text.as_slice());
@@ -71,39 +73,58 @@ pub fn initial_content(
     buf_mut.extend(title_text);
     buf_mut.extend_from_slice(b"</h1></header>\n");
 
+    // Allow other tasks to run before we complete the initial content payload
+    tokio::task::yield_now().await;
+
     // Randomise how many initial paragraphs we want
     let max_paras: u32 = rng.random_range(1..=3);
 
     for _ in 0..max_paras {
         buf_mut.extend(paragraph(
             &interner,
-            chain,
-            get_desired_size(config, rng),
-            rng,
+            &chain,
+            get_desired_size(&config, &mut rng),
+            &mut rng,
         ));
+
+        tokio::task::yield_now().await;
     }
+
+    buf_mut.freeze()
 }
 
-#[fastrace::trace]
-pub fn main_content(chain: &NailKov, config: &NailConfig, rng: &mut impl RngCore) -> Bytes {
+#[fastrace::trace(enter_on_poll = true)]
+pub async fn main_content(
+    interner: Arc<Interner>,
+    chain: Arc<NailKov>,
+    config: Arc<NailConfig>,
+) -> Bytes {
     // Allocate more than we need, as we might generate more tokens than our 4kB threshold
     let mut buffer = BytesMut::with_capacity(config.generator.chunk_size * 2);
-
-    let interner = INTERNER.read();
+    let mut rng = FastRng::default();
 
     loop {
         // Randomise how many paragraphs we want per section
         let max_paras: u32 = rng.random_range(1..=4);
 
-        buffer.extend(header(&interner, chain, config.generator.header_size, rng));
+        buffer.extend(header(
+            &interner,
+            &chain,
+            config.generator.header_size,
+            &mut rng,
+        ));
+
+        tokio::task::yield_now().await;
 
         for _ in 0..max_paras {
             buffer.extend(paragraph(
                 &interner,
-                chain,
-                get_desired_size(config, rng),
-                rng,
+                &chain,
+                get_desired_size(&config, &mut rng),
+                &mut rng,
             ));
+
+            tokio::task::yield_now().await;
         }
 
         // We can generate more before handing it off to be streamed to the client,
@@ -111,17 +132,22 @@ pub fn main_content(chain: &NailKov, config: &NailConfig, rng: &mut impl RngCore
         if buffer.len() >= config.generator.chunk_size {
             return buffer.freeze();
         }
+
+        // Yield to the runtime to allow other tasks a chance to run before we generate
+        // another chunk of data
+        tokio::task::yield_now().await;
     }
 }
 
 #[fastrace::trace]
-pub fn footer(chain: &NailKov, route: &str, config: &NailConfig, rng: &mut impl RngCore) -> Bytes {
+pub fn footer(interner: &Interner, chain: &NailKov, route: &str, config: &NailConfig) -> Bytes {
+    let mut rng = FastRng::default();
     let mut footer = BytesMut::with_capacity(512);
 
     if let Some(prompt) = match config.generator.prompts.len() {
         0 => None,
         1 => config.generator.prompts.first(),
-        _ => config.generator.prompts.choose(rng),
+        _ => config.generator.prompts.choose(&mut rng),
     } {
         footer.extend_from_slice(b"<p>");
         footer.extend_from_slice(prompt.as_bytes());
@@ -130,11 +156,11 @@ pub fn footer(chain: &NailKov, route: &str, config: &NailConfig, rng: &mut impl 
 
     footer.extend_from_slice(b"</article></main>\n<footer>");
     links(
-        &INTERNER.read(),
+        &interner,
         chain,
         route,
         config.generator.max_pit_links,
-        rng,
+        &mut rng,
         &mut footer,
     );
     footer.extend_from_slice(b"</footer>\n</body>\n</html>");

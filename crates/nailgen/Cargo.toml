@@ -23,6 +23,7 @@ futures-lite.workspace = true
 rand.workspace = true
 bytes.workspace = true
 log.workspace = true
+hyper.workspace = true
 tokio.workspace = true
 tokio-stream.workspace = true
 axum.workspace = true

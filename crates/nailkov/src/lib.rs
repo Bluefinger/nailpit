@@ -12,7 +12,7 @@ use indexmap::IndexMap;
 use interner::Interner;
 use itertools::Itertools;
 use nailrng::FastRng;
-use rand::{seq::IteratorRandom, RngCore};
+use rand::{RngCore, seq::IteratorRandom};
 use rand_distr::Distribution;
 
 use distribution::{TokenWeights, TokenWeightsBuilder};
@@ -43,7 +43,7 @@ impl Default for RandomState {
 
 impl core::hash::BuildHasher for RandomState {
     type Hasher = FxHasher;
-    
+
     fn build_hasher(&self) -> Self::Hasher {
         FxHasher::with_seed(self.seed)
     }

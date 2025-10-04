@@ -8,35 +8,34 @@ use std::{
 
 use axum::{
     body::Body,
-    http::{HeaderMap, Response},
+    http::{HeaderValue, Response},
     response::IntoResponse,
 };
-use futures_lite::{Stream, StreamExt, stream::Boxed};
-use hyper::body::{Bytes, Frame};
+use futures_lite::{Stream, StreamExt};
+use hyper::{
+    body::{Bytes, Frame},
+    header::CONTENT_TYPE,
+};
 
-pub struct NailStream {
-    stream: Boxed<Result<Frame<Bytes>, Infallible>>,
-    headers: Option<HeaderMap>,
+const CONTENT_TYPE_VALUE: HeaderValue = HeaderValue::from_static("text/html; charset=utf-8");
+
+pub struct NailResponseStream<S> {
+    stream: S,
 }
 
-impl NailStream {
-    pub fn from_stream(stream: impl Stream<Item = Bytes> + Send + 'static) -> Self {
-        Self {
-            stream: stream.map(Frame::data).map(Ok).boxed(),
-            headers: None,
-        }
+impl<S> NailResponseStream<S>
+where
+    S: Stream<Item = Result<Frame<Bytes>, Infallible>> + Unpin + Send + 'static,
+{
+    pub fn from_stream(stream: S) -> Self {
+        Self { stream }
     }
 }
 
-impl NailStream {
-    /// Set headers for the body.
-    pub fn headers(mut self, headers: HeaderMap) -> Self {
-        self.headers = Some(headers);
-        self
-    }
-}
-
-impl hyper::body::Body for NailStream {
+impl<S> hyper::body::Body for NailResponseStream<S>
+where
+    S: Stream<Item = Result<Frame<Bytes>, Infallible>> + Unpin + Send + 'static,
+{
     type Data = Bytes;
     type Error = Infallible;
 
@@ -48,11 +47,15 @@ impl hyper::body::Body for NailStream {
     }
 }
 
-impl IntoResponse for NailStream {
-    fn into_response(mut self) -> Response<Body> {
-        let mut headers = self.headers.take().unwrap_or_default();
+impl<S> IntoResponse for NailResponseStream<S>
+where
+    S: Stream<Item = Result<Frame<Bytes>, Infallible>> + Unpin + Send + 'static,
+{
+    fn into_response(self) -> Response<Body> {
         let mut response: Response<Body> = Response::new(Body::new(self));
-        response.headers_mut().extend(headers.drain());
+        response
+            .headers_mut()
+            .append(CONTENT_TYPE, CONTENT_TYPE_VALUE);
         response
     }
 }

@@ -3,19 +3,20 @@
 
 use core::task::Poll;
 use std::{
+    convert::Infallible,
     path::Path,
-    sync::{Arc, LazyLock},
+    pin::Pin,
+    sync::Arc,
     time::{Duration, Instant},
 };
 
 use axum::extract::NestedPath;
-use bytes::{Bytes, BytesMut};
+use bytes::Bytes;
 use color_eyre::Result;
-use futures_lite::Stream;
+use futures_lite::{FutureExt, Stream, StreamExt};
+use hyper::body::Frame;
 use nailconfig::NailConfig;
 use nailkov::{NailKov, interner::Interner};
-use nailrng::FastRng;
-use parking_lot::RwLock;
 use pin_project_lite::pin_project;
 use tokio::time::Sleep;
 
@@ -27,8 +28,6 @@ use crate::{
 mod delay;
 mod html_gen;
 
-pub static INTERNER: LazyLock<Arc<RwLock<Interner>>> = LazyLock::new(Default::default);
-
 #[derive(Clone)]
 pub struct MarkovGen {
     chain: Arc<NailKov>,
@@ -39,9 +38,11 @@ pin_project! {
     enum GeneratorState {
         Header,
         MainContent,
+        GeneratingContent {
+            handle: Pin<Box<dyn Future<Output = Bytes> + Send>>,
+        },
         Delay {
-            #[pin]
-            delay: Sleep
+            delay: Pin<Box<Sleep>>
         },
         Footer,
         Finished,
@@ -52,24 +53,29 @@ pin_project! {
     pub struct MarkovStream {
         path: NestedPath,
         config: Arc<NailConfig>,
+        interner: Arc<Interner>,
         markov: MarkovGen,
         start_time: Instant,
         total_bytes: usize,
-        rng: FastRng,
         #[pin]
         state: GeneratorState,
     }
 }
 
 impl MarkovStream {
-    pub fn new(path: NestedPath, config: Arc<NailConfig>, markov: MarkovGen) -> Self {
+    pub fn new(
+        markov: MarkovGen,
+        path: NestedPath,
+        config: Arc<NailConfig>,
+        interner: Arc<Interner>,
+    ) -> Self {
         Self {
             path,
             config,
+            interner,
             markov,
             total_bytes: 0,
             start_time: Instant::now(),
-            rng: FastRng::default(),
             state: GeneratorState::Header,
         }
     }
@@ -88,19 +94,16 @@ impl Stream for MarkovStream {
         loop {
             match this.state.as_mut().project() {
                 GeneratorStateProj::Header => {
-                    let mut content = BytesMut::with_capacity(2048);
+                    this.state.set(GeneratorState::GeneratingContent {
+                        handle: initial_content(
+                            this.interner.clone(),
+                            this.markov.chain.clone(),
+                            this.config.clone(),
+                        )
+                        .boxed(),
+                    });
 
-                    initial_content(&this.markov.chain, this.config, this.rng, &mut content);
-
-                    *this.total_bytes += content.len();
-
-                    if let Some(delay) = delay_output(this.config, this.rng) {
-                        this.state.set(GeneratorState::Delay { delay });
-                    } else {
-                        this.state.set(GeneratorState::MainContent);
-                    }
-
-                    return Poll::Ready(Some(content.freeze()));
+                    continue;
                 }
                 GeneratorStateProj::MainContent => {
                     let time_limit = Duration::from_secs(this.config.generator.timeout);
@@ -117,31 +120,48 @@ impl Stream for MarkovStream {
                         continue;
                     }
 
-                    if let Some(delay) = delay_output(this.config, this.rng) {
-                        this.state.set(GeneratorState::Delay { delay });
-                    }
+                    this.state.set(GeneratorState::GeneratingContent {
+                        handle: main_content(
+                            this.interner.clone(),
+                            this.markov.chain.clone(),
+                            this.config.clone(),
+                        )
+                        .boxed(),
+                    });
 
-                    let content = main_content(&this.markov.chain, this.config, this.rng);
-
-                    *this.total_bytes += content.len();
-
-                    return Poll::Ready(Some(content));
+                    continue;
                 }
-                GeneratorStateProj::Delay { delay } => {
-                    match delay.poll(cx) {
-                        Poll::Ready(_) => {
-                            this.state.set(GeneratorState::MainContent);
-                            continue;
+                GeneratorStateProj::GeneratingContent { handle } => {
+                    match handle.as_mut().poll(cx) {
+                        Poll::Ready(content) => {
+                            *this.total_bytes += content.len();
+
+                            if let Some(delay) = delay_output(this.config) {
+                                this.state.set(GeneratorState::Delay {
+                                    delay: Box::pin(delay),
+                                });
+                            } else {
+                                this.state.set(GeneratorState::MainContent);
+                            }
+
+                            return Poll::Ready(Some(content));
                         }
                         Poll::Pending => return Poll::Pending,
                     }
                 }
+                GeneratorStateProj::Delay { delay } => match delay.as_mut().poll(cx) {
+                    Poll::Ready(_) => {
+                        this.state.set(GeneratorState::MainContent);
+                        continue;
+                    }
+                    Poll::Pending => return Poll::Pending,
+                },
                 GeneratorStateProj::Footer => {
                     let content = footer(
+                        this.interner,
                         this.markov.chain.as_ref(),
                         this.path.as_str(),
                         this.config,
-                        this.rng,
                     );
 
                     *this.total_bytes += content.len();
@@ -173,7 +193,14 @@ impl MarkovGen {
 
     #[fastrace::trace]
     #[inline]
-    pub fn into_stream(self, path: NestedPath, config: Arc<NailConfig>) -> MarkovStream {
-        MarkovStream::new(path, config, self)
+    pub fn into_frame_stream(
+        self,
+        path: NestedPath,
+        config: Arc<NailConfig>,
+        interner: Arc<Interner>,
+    ) -> impl Stream<Item = Result<Frame<Bytes>, Infallible>> {
+        MarkovStream::new(self, path, config, interner)
+            .map(Frame::data)
+            .map(Ok)
     }
 }
