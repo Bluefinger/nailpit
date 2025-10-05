@@ -1132,7 +1132,6 @@ dependencies = [
  "fastrace",
  "fastrace-futures",
  "futures-lite",
- "hyper",
  "log",
  "nailconfig",
  "nailkov",

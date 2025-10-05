@@ -3,7 +3,6 @@
 
 use core::task::Poll;
 use std::{
-    convert::Infallible,
     path::Path,
     pin::Pin,
     sync::Arc,
@@ -13,8 +12,7 @@ use std::{
 use axum::extract::NestedPath;
 use bytes::Bytes;
 use color_eyre::Result;
-use futures_lite::{FutureExt, Stream, StreamExt};
-use hyper::body::Frame;
+use futures_lite::{FutureExt, Stream};
 use nailconfig::NailConfig;
 use nailkov::{NailKov, interner::Interner};
 use pin_project_lite::pin_project;
@@ -193,14 +191,12 @@ impl MarkovGen {
 
     #[fastrace::trace]
     #[inline]
-    pub fn into_frame_stream(
+    pub fn into_stream(
         self,
         path: NestedPath,
         config: Arc<NailConfig>,
         interner: Arc<Interner>,
-    ) -> impl Stream<Item = Result<Frame<Bytes>, Infallible>> {
+    ) -> MarkovStream {
         MarkovStream::new(self, path, config, interner)
-            .map(Frame::data)
-            .map(Ok)
     }
 }

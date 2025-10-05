@@ -25,7 +25,7 @@ pub struct NailResponseStream<S> {
 
 impl<S> NailResponseStream<S>
 where
-    S: Stream<Item = Result<Frame<Bytes>, Infallible>> + Unpin + Send + 'static,
+    S: Stream<Item = Bytes> + Unpin + Send + 'static,
 {
     pub fn from_stream(stream: S) -> Self {
         Self { stream }
@@ -34,7 +34,7 @@ where
 
 impl<S> hyper::body::Body for NailResponseStream<S>
 where
-    S: Stream<Item = Result<Frame<Bytes>, Infallible>> + Unpin + Send + 'static,
+    S: Stream<Item = Bytes> + Unpin + Send + 'static,
 {
     type Data = Bytes;
     type Error = Infallible;
@@ -43,13 +43,16 @@ where
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
-        self.stream.poll_next(cx)
+        match self.stream.poll_next(cx) {
+            Poll::Ready(payload) => Poll::Ready(payload.map(Frame::data).map(Ok)),
+            Poll::Pending => Poll::Pending,
+        }
     }
 }
 
 impl<S> IntoResponse for NailResponseStream<S>
 where
-    S: Stream<Item = Result<Frame<Bytes>, Infallible>> + Unpin + Send + 'static,
+    S: Stream<Item = Bytes> + Unpin + Send + 'static,
 {
     fn into_response(self) -> Response<Body> {
         let mut response: Response<Body> = Response::new(Body::new(self));

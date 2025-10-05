@@ -29,11 +29,11 @@ async fn index() -> Html<&'static str> {
 }
 
 #[fastrace::trace]
-async fn generated(config: AppConfig, input: NailInputs, path: NestedPath) -> impl IntoResponse {
+async fn generated(config: AppConfig, inputs: NailInputs, path: NestedPath) -> impl IntoResponse {
     NailResponseStream::from_stream(
-        input
+        inputs
             .get_random_input()
-            .into_frame_stream(path, config.clone_inner(), input.get_interner())
+            .into_stream(path, config.clone_inner(), inputs.get_interner())
             .in_span(Span::enter_with_local_parent("Nailstream")),
     )
 }
