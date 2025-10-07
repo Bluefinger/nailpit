@@ -19,8 +19,7 @@ async fn spawn_axum_worker(
 
     axum::serve(
         listener,
-        nailroutes::nail_app(nailroutes::nail_route(state.clone()), state, app.spicy)
-            .into_make_service_with_connect_info::<SocketAddr>(),
+        nailroutes::nail_app(state, app.spicy).into_make_service_with_connect_info::<SocketAddr>(),
     )
     .with_graceful_shutdown(nailpit::shutdown::wait_for_shutdown(shutdown_notifier))
     .await?;
