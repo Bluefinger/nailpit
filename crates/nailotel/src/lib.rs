@@ -1,3 +1,5 @@
+use std::{borrow::Cow, sync::Arc};
+
 use fastrace::collector::Config;
 use fastrace_opentelemetry::OpenTelemetryReporter;
 use logforth::append::opentelemetry::OpentelemetryLogBuilder;
@@ -5,7 +7,6 @@ use nailconfig::NailConfig;
 use opentelemetry::{InstrumentationScope, trace::SpanKind};
 use opentelemetry_otlp::{LogExporter, Protocol, SpanExporter, WithExportConfig, WithTonicConfig};
 use opentelemetry_sdk::Resource;
-use std::borrow::Cow;
 
 pub fn init_logging_reporter(config: &NailConfig) -> logforth::append::OpentelemetryLog {
     let log_exporter = LogExporter::builder()
@@ -47,4 +48,29 @@ pub fn init_tracing_reporter(config: &NailConfig) {
     );
 
     fastrace::set_reporter(reporter, Config::default());
+}
+
+pub fn init_telemetry(config: Arc<nailconfig::NailConfig>) {
+    logforth::builder()
+        .dispatch(|d| {
+            let d = d.filter(logforth::filter::EnvFilter::from_default_env());
+
+            if config.open_telemetry.logs {
+                d.diagnostic(logforth::diagnostic::FastraceDiagnostic::default())
+                    .append(logforth::append::FastraceEvent::default())
+                    .append(init_logging_reporter(config.as_ref()))
+                    .append(logforth::append::Stderr::default())
+            } else {
+                d.append(logforth::append::Stderr::default())
+            }
+        })
+        .apply();
+
+    #[cfg(feature = "tracing")]
+    if config.open_telemetry.traces {
+        init_tracing_reporter(config.as_ref());
+    }
+
+    log::info!("Welcome to Nailpit!");
+    log::info!("Loaded config: {config:?}");
 }

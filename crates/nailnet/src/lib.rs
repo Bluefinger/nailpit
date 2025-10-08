@@ -1,5 +1,7 @@
 use core::{net::SocketAddr, str::FromStr};
+use std::sync::OnceLock;
 
+use axum::{extract::connect_info::Connected, serve::IncomingStream};
 use socket2::{Domain, Socket, Type};
 
 pub fn get_tcp_socket(addr: &str) -> color_eyre::Result<tokio::net::TcpListener> {
@@ -22,4 +24,21 @@ pub fn get_tcp_socket(addr: &str) -> color_eyre::Result<tokio::net::TcpListener>
     let listener = tokio::net::TcpListener::from_std(listener)?;
 
     Ok(listener)
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct NailConnectionInfo {
+    pub remote: SocketAddr,
+    pub local: SocketAddr,
+}
+
+impl Connected<IncomingStream<'_, tokio::net::TcpListener>> for NailConnectionInfo {
+    fn connect_info(stream: IncomingStream<'_, tokio::net::TcpListener>) -> Self {
+        static CACHED_LOCAL: OnceLock<SocketAddr> = OnceLock::new();
+
+        let remote = *stream.remote_addr();
+        let local = *CACHED_LOCAL.get_or_init(|| stream.io().local_addr().unwrap());
+
+        Self { remote, local }
+    }
 }

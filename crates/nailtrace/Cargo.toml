@@ -9,6 +9,7 @@ rust-version.workspace = true
 
 [dependencies]
 nailip = { path = "../nailip" }
+nailnet = { path = "../nailnet" }
 axum = { workspace = true, features = ["matched-path"] }
 fastrace.workspace = true
 hyper.workspace = true

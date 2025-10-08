@@ -1,0 +1,17 @@
+[package]
+name = "nailnet"
+authors.workspace = true
+edition.workspace = true
+repository.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+socket2 = "0.6.0"
+axum.workspace = true
+color-eyre.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true

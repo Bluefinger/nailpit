@@ -1152,6 +1152,7 @@ dependencies = [
  "log",
  "nailconfig",
  "nailfv",
+ "nailnet",
  "pin-project-lite",
  "scc",
  "tokio",
@@ -1176,11 +1177,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "nailnet"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "color-eyre",
+ "socket2",
+ "tokio",
+]
+
+[[package]]
 name = "nailotel"
 version = "0.1.0"
 dependencies = [
  "fastrace",
  "fastrace-opentelemetry",
+ "log",
  "logforth",
  "nailconfig",
  "opentelemetry",
@@ -1194,16 +1206,15 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "color-eyre",
- "fastrace",
  "futures-concurrency",
  "glob",
  "log",
- "logforth",
  "mimalloc-safe",
  "nailconfig",
  "nailgen",
  "nailip",
  "nailkov",
+ "nailnet",
  "nailotel",
  "nailrater",
  "nailrng",
@@ -1212,7 +1223,6 @@ dependencies = [
  "nailstate",
  "nailstream",
  "nailtrace",
- "socket2",
  "tokio",
 ]
 
@@ -1303,6 +1313,7 @@ dependencies = [
  "fastrace",
  "hyper",
  "nailip",
+ "nailnet",
  "opentelemetry-semantic-conventions",
  "pin-project-lite",
  "tower-http",
