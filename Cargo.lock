@@ -1126,7 +1126,6 @@ dependencies = [
 name = "nailgen"
 version = "0.1.0"
 dependencies = [
- "axum",
  "bytes",
  "color-eyre",
  "fastrace",
@@ -1153,6 +1152,7 @@ dependencies = [
  "log",
  "nailconfig",
  "nailfv",
+ "nailnet",
  "pin-project-lite",
  "scc",
  "tokio",
@@ -1177,11 +1177,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "nailnet"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "color-eyre",
+ "socket2",
+ "tokio",
+]
+
+[[package]]
 name = "nailotel"
 version = "0.1.0"
 dependencies = [
  "fastrace",
  "fastrace-opentelemetry",
+ "log",
  "logforth",
  "nailconfig",
  "opentelemetry",
@@ -1195,16 +1206,15 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "color-eyre",
- "fastrace",
  "futures-concurrency",
  "glob",
  "log",
- "logforth",
  "mimalloc-safe",
  "nailconfig",
  "nailgen",
  "nailip",
  "nailkov",
+ "nailnet",
  "nailotel",
  "nailrater",
  "nailrng",
@@ -1213,7 +1223,6 @@ dependencies = [
  "nailstate",
  "nailstream",
  "nailtrace",
- "socket2",
  "tokio",
 ]
 
@@ -1304,6 +1313,9 @@ dependencies = [
  "fastrace",
  "hyper",
  "nailip",
+ "nailnet",
+ "opentelemetry-semantic-conventions",
+ "pin-project-lite",
  "tower-http",
  "uuid",
 ]
@@ -1403,6 +1415,12 @@ dependencies = [
  "serde",
  "tonic",
 ]
+
+[[package]]
+name = "opentelemetry-semantic-conventions"
+version = "0.30.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "83d059a296a47436748557a353c5e6c5705b9470ef6c95cfc52c21a8814ddac2"
 
 [[package]]
 name = "opentelemetry_sdk"

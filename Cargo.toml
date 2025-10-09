@@ -91,7 +91,7 @@ name = "nailpit"
 
 [features]
 default = ["mimalloc"]
-tracing = ["fastrace/enable"]
+tracing = ["nailotel/tracing"]
 mimalloc = ["dep:mimalloc-safe"]
 
 [dependencies]
@@ -107,16 +107,14 @@ nailip = { path = "crates/nailip" }
 nailotel = { path = "crates/nailotel" }
 nailroutes = { path = "crates/nailroutes" }
 nailspicy = { path = "crates/nailspicy" }
+nailnet = { path = "crates/nailnet" }
 axum.workspace = true
 tokio.workspace = true
 color-eyre.workspace = true
 log.workspace = true
-fastrace.workspace = true
-logforth.workspace = true
 futures-concurrency = "7.6.3"
 glob = "0.3.2"
 mimalloc-safe = { version = "0.1.50", optional = true }
-socket2 = "0.6.0"
 
 [profile.release]
 codegen-units = 1

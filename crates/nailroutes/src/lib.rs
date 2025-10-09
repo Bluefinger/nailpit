@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use axum::{
     Router,
-    extract::NestedPath,
+    extract::OriginalUri,
     response::{Html, IntoResponse},
     routing::get,
 };
@@ -29,7 +29,13 @@ async fn index() -> Html<&'static str> {
 }
 
 #[fastrace::trace]
-async fn generated(config: AppConfig, inputs: NailInputs, path: NestedPath) -> impl IntoResponse {
+async fn generated(config: AppConfig, inputs: NailInputs, path: OriginalUri) -> impl IntoResponse {
+    let path: Option<Box<str>> = path
+        .0
+        .path()
+        .rsplit_once("/")
+        .map(|(prefix, _)| prefix.into());
+
     NailResponseStream::from_stream(
         inputs
             .get_random_input()
@@ -38,12 +44,10 @@ async fn generated(config: AppConfig, inputs: NailInputs, path: NestedPath) -> i
     )
 }
 
-pub fn nail_app(
-    routes: Router,
-    state: ServerState,
-    spicy_payload: Option<Arc<SpicyPayloads>>,
-) -> Router {
-    routes
+pub fn nail_app(state: ServerState, spicy_payload: Option<Arc<SpicyPayloads>>) -> Router {
+    let rate_limiting = state.config.rate_limiting.clone();
+
+    nail_route(state)
         .layer(
             ServiceBuilder::new()
                 .set_x_request_id(MakeRequestUuid)
@@ -51,10 +55,7 @@ pub fn nail_app(
                 .layer(axum::middleware::from_fn(tracing_root_span))
                 .layer(NormalizePathLayer::trim_trailing_slash())
                 .layer(CompressionLayer::new().quality(CompressionLevel::Default))
-                .layer(NailRaterLayer::new(
-                    state.config.rate_limiting.clone(),
-                    spicy_payload,
-                ))
+                .layer(NailRaterLayer::new(rate_limiting, spicy_payload))
                 .propagate_x_request_id(),
         )
         .route("/favicon.ico", get(async || StatusCode::NOT_FOUND))
@@ -62,17 +63,22 @@ pub fn nail_app(
 }
 
 pub fn nail_route(state: ServerState) -> Router {
-    let index = Router::new().route("/", get(index));
+    let generator_routes = Router::new()
+        .route("/", get(index))
+        .route("/{*generated}", get(generated));
 
-    let pit = state
+    state
         .config
         .server
         .pit_routes
         .iter()
-        .fold(Router::new(), |router, path| {
-            router.nest(path.as_str(), Router::new().fallback(get(generated)))
+        .fold(generator_routes, |router, path| {
+            if path == "/" {
+                router
+            } else {
+                let nested = router.clone();
+                router.nest(path.as_str(), nested)
+            }
         })
-        .with_state(state);
-
-    index.merge(pit)
+        .with_state(state)
 }

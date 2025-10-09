@@ -25,4 +25,3 @@ bytes.workspace = true
 log.workspace = true
 tokio.workspace = true
 tokio-stream.workspace = true
-axum.workspace = true

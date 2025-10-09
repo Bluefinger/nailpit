@@ -54,7 +54,7 @@ where
         }
 
         rt.block_on(async {
-            crate::telemetry::init_telemetry(app.config.clone());
+            nailotel::init_telemetry(app.config.clone());
 
             let handle = tokio::spawn(crate::shutdown::shutdown_task(shutdown_signal));
 

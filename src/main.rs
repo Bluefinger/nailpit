@@ -1,5 +1,5 @@
 #![forbid(unsafe_code)]
-use std::{net::SocketAddr, sync::Arc};
+use std::sync::Arc;
 
 use color_eyre::Result;
 use nailpit::app::App;
@@ -13,14 +13,14 @@ async fn spawn_axum_worker(
     shutdown_notifier: Arc<tokio::sync::watch::Sender<()>>,
 ) -> Result<()> {
     let state = nailstate::ServerState::new(app.config, app.inputs, app.interner);
-    let listener = nailpit::net::get_tcp_socket(&state.config.server.socket_addr)?;
+    let listener = nailnet::get_tcp_socket(&state.config.server.socket_addr)?;
 
     log::info!("worker listening on http://{}", listener.local_addr()?);
 
     axum::serve(
         listener,
-        nailroutes::nail_app(nailroutes::nail_route(state.clone()), state, app.spicy)
-            .into_make_service_with_connect_info::<SocketAddr>(),
+        nailroutes::nail_app(state, app.spicy)
+            .into_make_service_with_connect_info::<nailnet::NailConnectionInfo>(),
     )
     .with_graceful_shutdown(nailpit::shutdown::wait_for_shutdown(shutdown_notifier))
     .await?;
