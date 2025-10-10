@@ -1,5 +1,5 @@
 [server]
-pit_routes = ["/private"]
+pit_routes = ["/private/"]
 socket_addr = "0.0.0.0:3000"
 worker_threads = 4
 

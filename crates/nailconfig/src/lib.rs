@@ -33,7 +33,7 @@ impl Deref for PromptsList {
     }
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize)]
 pub struct ServerConfig {
     pub pit_routes: Vec<String>,
     pub socket_addr: String,

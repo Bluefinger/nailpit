@@ -9,6 +9,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use axum::extract::MatchedPath;
 use bytes::Bytes;
 use color_eyre::Result;
 use futures_lite::{FutureExt, Stream};
@@ -48,7 +49,7 @@ pin_project! {
 
 pin_project! {
     pub struct MarkovStream {
-        path: Option<Box<str>>,
+        path: MatchedPath,
         config: Arc<NailConfig>,
         interner: Arc<Interner>,
         markov: MarkovGen,
@@ -62,7 +63,7 @@ pin_project! {
 impl MarkovStream {
     pub fn new(
         markov: MarkovGen,
-        path: Option<Box<str>>,
+        path: MatchedPath,
         config: Arc<NailConfig>,
         interner: Arc<Interner>,
     ) -> Self {
@@ -157,7 +158,10 @@ impl Stream for MarkovStream {
                     let content = footer(
                         this.interner,
                         this.markov.chain.as_ref(),
-                        this.path.as_deref().unwrap_or(""),
+                        this.path
+                            .as_str()
+                            .strip_suffix("/{*generated}")
+                            .unwrap_or_else(|| this.path.as_str()),
                         this.config,
                     );
 
@@ -192,7 +196,7 @@ impl MarkovGen {
     #[inline]
     pub fn into_stream(
         self,
-        path: Option<Box<str>>,
+        path: MatchedPath,
         config: Arc<NailConfig>,
         interner: Arc<Interner>,
     ) -> MarkovStream {

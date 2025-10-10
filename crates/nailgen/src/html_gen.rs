@@ -74,7 +74,7 @@ pub async fn initial_content(
     buf_mut.extend_from_slice(b"</h1></header>\n");
 
     // Allow other tasks to run before we complete the initial content payload
-    tokio::task::yield_now().await;
+    futures_lite::future::yield_now().await;
 
     // Randomise how many initial paragraphs we want
     let max_paras: u32 = rng.random_range(1..=3);
@@ -86,8 +86,6 @@ pub async fn initial_content(
             get_desired_size(&config, &mut rng),
             &mut rng,
         ));
-
-        tokio::task::yield_now().await;
     }
 
     buf_mut.freeze()
@@ -114,8 +112,6 @@ pub async fn main_content(
             &mut rng,
         ));
 
-        tokio::task::yield_now().await;
-
         for _ in 0..max_paras {
             buffer.extend(paragraph(
                 &interner,
@@ -123,8 +119,6 @@ pub async fn main_content(
                 get_desired_size(&config, &mut rng),
                 &mut rng,
             ));
-
-            tokio::task::yield_now().await;
         }
 
         // We can generate more before handing it off to be streamed to the client,
@@ -135,7 +129,7 @@ pub async fn main_content(
 
         // Yield to the runtime to allow other tasks a chance to run before we generate
         // another chunk of data
-        tokio::task::yield_now().await;
+        futures_lite::future::yield_now().await;
     }
 }
 

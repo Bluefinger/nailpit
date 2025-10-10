@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use axum::{
     Router,
-    extract::OriginalUri,
+    extract::MatchedPath,
     response::{Html, IntoResponse},
     routing::get,
 };
@@ -29,17 +29,15 @@ async fn index() -> Html<&'static str> {
 }
 
 #[fastrace::trace]
-async fn generated(config: AppConfig, inputs: NailInputs, path: OriginalUri) -> impl IntoResponse {
-    let path: Option<Box<str>> = path
-        .0
-        .path()
-        .rsplit_once("/")
-        .map(|(prefix, _)| prefix.into());
-
+async fn generated(
+    config: AppConfig,
+    inputs: NailInputs,
+    matched: MatchedPath,
+) -> impl IntoResponse {
     NailResponseStream::from_stream(
         inputs
             .get_random_input()
-            .into_stream(path, config.clone_inner(), inputs.get_interner())
+            .into_stream(matched, config.clone_inner(), inputs.get_interner())
             .in_span(Span::enter_with_local_parent("Nailstream")),
     )
 }
@@ -63,7 +61,7 @@ pub fn nail_app(state: ServerState, spicy_payload: Option<Arc<SpicyPayloads>>) -
 }
 
 pub fn nail_route(state: ServerState) -> Router {
-    let generator_routes = Router::new()
+    let generation_routes = Router::new()
         .route("/", get(index))
         .route("/{*generated}", get(generated));
 
@@ -72,12 +70,12 @@ pub fn nail_route(state: ServerState) -> Router {
         .server
         .pit_routes
         .iter()
-        .fold(generator_routes, |router, path| {
+        .fold(generation_routes, |router, path| {
             if path == "/" {
                 router
             } else {
-                let nested = router.clone();
-                router.nest(path.as_str(), nested)
+                let nested_routes = router.clone();
+                router.nest(path, nested_routes)
             }
         })
         .with_state(state)

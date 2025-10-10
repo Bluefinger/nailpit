@@ -1,3 +1,4 @@
+use core::net::SocketAddr;
 use std::iter::once;
 
 use axum::{
@@ -9,7 +10,6 @@ use axum::{
 use fastrace::prelude::*;
 use hyper::header::{CONTENT_ENCODING, CONTENT_TYPE, HOST, USER_AGENT};
 use nailip::{IdentifiedPeer, header_value_to_str};
-use nailnet::NailConnectionInfo;
 use opentelemetry_semantic_conventions::trace::{
     CLIENT_ADDRESS, HTTP_REQUEST_METHOD, HTTP_RESPONSE_STATUS_CODE, HTTP_ROUTE, SERVER_ADDRESS,
     SERVER_PORT, URL_PATH, USER_AGENT_ORIGINAL,
@@ -26,7 +26,7 @@ pub const TRACEPARENT_HEADER: &str = "traceparent";
 pub async fn tracing_root_span(
     request_id: Extension<RequestId>,
     peer: Extension<IdentifiedPeer>,
-    connection: ConnectInfo<NailConnectionInfo>,
+    connection: ConnectInfo<SocketAddr>,
     request: Request,
     next: Next,
 ) -> Response {
@@ -76,7 +76,7 @@ pub async fn tracing_root_span(
                 SERVER_PORT,
                 host.next()
                     .map(ToString::to_string)
-                    .unwrap_or_else(|| connection.local.port().to_string()),
+                    .unwrap_or_else(|| connection.port().to_string()),
             )))
     });
 
@@ -100,6 +100,7 @@ where
 {
     type Output = F::Output;
 
+    #[fastrace::trace]
     fn poll(
         self: core::pin::Pin<&mut Self>,
         cx: &mut core::task::Context<'_>,
@@ -108,9 +109,9 @@ where
         let poll = this.inner.poll(cx);
 
         if let core::task::Poll::Ready(response) = &poll {
-            let headers = response.headers();
-
             LocalSpan::add_properties(|| {
+                let headers = response.headers();
+
                 once((
                     HTTP_RESPONSE_STATUS_CODE,
                     response.status().as_u16().to_string(),
