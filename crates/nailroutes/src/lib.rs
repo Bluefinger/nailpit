@@ -61,20 +61,21 @@ pub fn nail_app(state: ServerState, spicy_payload: Option<Arc<SpicyPayloads>>) -
 }
 
 pub fn nail_route(state: ServerState) -> Router {
-    let generation_route = Router::new().route("/{*generated}", get(generated));
+    let generation_routes = Router::new()
+        .route("/", get(index))
+        .route("/{*generated}", get(generated));
 
     state
         .config
         .server
         .pit_routes
         .iter()
-        .fold(Router::new(), |router, path| {
-            let router = router.route(path, get(index));
-
+        .fold(generation_routes, |router, path| {
             if path == "/" {
-                router.merge(generation_route.clone())
+                router
             } else {
-                router.nest(path, generation_route.clone())
+                let nested_routes = router.clone();
+                router.nest(path, nested_routes)
             }
         })
         .with_state(state)
