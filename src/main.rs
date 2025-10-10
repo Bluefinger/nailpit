@@ -1,4 +1,5 @@
 #![forbid(unsafe_code)]
+use core::net::SocketAddr;
 use std::sync::Arc;
 
 use color_eyre::Result;
@@ -19,8 +20,7 @@ async fn spawn_axum_worker(
 
     axum::serve(
         listener,
-        nailroutes::nail_app(state, app.spicy)
-            .into_make_service_with_connect_info::<nailnet::NailConnectionInfo>(),
+        nailroutes::nail_app(state, app.spicy).into_make_service_with_connect_info::<SocketAddr>(),
     )
     .with_graceful_shutdown(nailpit::shutdown::wait_for_shutdown(shutdown_notifier))
     .await?;

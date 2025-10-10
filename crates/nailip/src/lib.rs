@@ -1,4 +1,4 @@
-use core::net::IpAddr;
+use core::net::{IpAddr, SocketAddr};
 
 use axum::{
     extract::{ConnectInfo, Request},
@@ -25,12 +25,12 @@ impl core::hash::Hash for IdentifiedPeer {
 }
 
 impl IdentifiedPeer {
-    fn extract(headers: &HeaderMap, connection: &ConnectInfo<nailnet::NailConnectionInfo>) -> Self {
+    fn extract(headers: &HeaderMap, connection: &ConnectInfo<SocketAddr>) -> Self {
         Self(
             maybe_x_forwarded_for(headers)
                 .or_else(|| maybe_x_real_ip(headers))
                 .or_else(|| maybe_forwarded_for(headers))
-                .unwrap_or_else(|| connection.remote.ip()),
+                .unwrap_or_else(|| connection.ip()),
         )
     }
 
@@ -46,7 +46,7 @@ impl core::fmt::Display for IdentifiedPeer {
 }
 
 pub async fn identify_peer(
-    connection: ConnectInfo<nailnet::NailConnectionInfo>,
+    connection: ConnectInfo<SocketAddr>,
     mut req: Request,
     next: Next,
 ) -> Response {
