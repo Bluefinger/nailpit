@@ -70,11 +70,11 @@ pub fn nail_route(state: ServerState) -> Router {
         .server
         .pit_routes
         .iter()
-        .fold(generation_routes, |router, path| {
+        .fold(Router::new(), |router, path| {
             if path == "/" {
-                router
+                router.merge(generation_routes.clone())
             } else {
-                let nested_routes = router.clone();
+                let nested_routes = generation_routes.clone();
                 router.nest(path, nested_routes)
             }
         })

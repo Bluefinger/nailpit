@@ -12,13 +12,14 @@ tracing = ["fastrace/enable"]
 
 [dependencies]
 nailconfig = { path = "../nailconfig" }
-log.workspace = true
+log = { workspace = true, features = ["kv"] }
 fastrace.workspace = true
-logforth.workspace = true
-fastrace-opentelemetry = "0.11.0"
-opentelemetry = { version = "0.30.0", default-features = false, features = ["trace", "logs"] }
-opentelemetry-otlp = { version = "0.30.0", default-features = false, features = ["trace", "logs", "grpc-tonic", "zstd-tonic"] }
-opentelemetry_sdk = { version = "0.30.0", default-features = false, features = ["trace", "logs"] }
+logforth = { workspace = true, features = ["layout-text", "layout-json", "bridge-log"] }
+fastrace-opentelemetry = "0.14.0"
+color-eyre.workspace = true
+opentelemetry.workspace = true
+opentelemetry-otlp.workspace = true
+opentelemetry_sdk.workspace = true
 
 [lints]
 workspace = true
