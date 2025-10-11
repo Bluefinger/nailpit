@@ -57,6 +57,7 @@ pub async fn tracing_root_span(
             .flat_map(|header| header.trim().split(":"));
 
         once((HTTP_ROUTE, path))
+            .chain(Some(("span.kind", "server".to_string())))
             .chain(Some((HTTP_REQUEST_METHOD, method)))
             .chain(Some((URL_PATH, request.uri().path().to_string())))
             .chain(

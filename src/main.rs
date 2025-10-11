@@ -16,7 +16,7 @@ async fn spawn_axum_worker(
     let state = nailstate::ServerState::new(app.config, app.inputs, app.interner);
     let listener = nailnet::get_tcp_socket(&state.config.server.socket_addr)?;
 
-    log::info!("worker listening on http://{}", listener.local_addr()?);
+    log::info!(port:% = listener.local_addr()?; "Worker listening on");
 
     axum::serve(
         listener,
@@ -30,6 +30,7 @@ async fn spawn_axum_worker(
 
 fn main() -> Result<()> {
     color_eyre::install()?;
+    logforth_bridge_log::try_setup()?;
 
     let config = nailconfig::get_configuration().map(Arc::new)?;
 
@@ -38,8 +39,6 @@ fn main() -> Result<()> {
     let spicy = nailspicy::get_spicy_payload(config.as_ref()).map(Arc::new);
 
     nailpit::runtime::start(App::new(config, inputs, interner, spicy), spawn_axum_worker)?;
-
-    log::info!("Everything shutdown gracefully. Good night :)");
 
     Ok(())
 }

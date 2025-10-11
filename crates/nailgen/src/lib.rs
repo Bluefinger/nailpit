@@ -169,10 +169,12 @@ impl Stream for MarkovStream {
 
                     this.state.set(GeneratorState::Finished);
 
-                    log::info!(
-                        "Written ({:.2} MB in {}us)",
-                        (*this.total_bytes as f64) * 1e-6,
-                        this.start_time.elapsed().as_micros()
+                    let elapsed_time = this.start_time.elapsed().as_micros();
+
+                    log::trace!(
+                        "payload.size" = *this.total_bytes,
+                        "duration.us" = elapsed_time;
+                        "Stream finished in {:.2}ms", (elapsed_time as f32) * 1e-3
                     );
 
                     return Poll::Ready(Some(content));
@@ -192,7 +194,6 @@ impl MarkovGen {
         Ok(Self { chain })
     }
 
-    #[fastrace::trace]
     #[inline]
     pub fn into_stream(
         self,

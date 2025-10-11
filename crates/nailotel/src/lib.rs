@@ -1,32 +1,42 @@
 use std::{borrow::Cow, sync::Arc};
 
+use color_eyre::Result;
 use fastrace::collector::Config;
 use fastrace_opentelemetry::OpenTelemetryReporter;
-use logforth::append::opentelemetry::OpentelemetryLogBuilder;
+use logforth::{
+    append::{
+        OpentelemetryLog,
+        opentelemetry::{MakeBodyLayout, OpentelemetryLogBuilder},
+    },
+    layout::{JsonLayout, TextLayout},
+};
 use nailconfig::NailConfig;
-use opentelemetry::{InstrumentationScope, trace::SpanKind};
+use opentelemetry::InstrumentationScope;
 use opentelemetry_otlp::{LogExporter, Protocol, SpanExporter, WithExportConfig, WithTonicConfig};
 use opentelemetry_sdk::Resource;
 
-pub fn init_logging_reporter(config: &NailConfig) -> logforth::append::OpentelemetryLog {
+pub fn init_logging_reporter(config: &NailConfig) -> Result<OpentelemetryLog> {
     let log_exporter = LogExporter::builder()
         .with_tonic()
         .with_endpoint(&config.open_telemetry.endpoint)
-        .build()
-        .unwrap();
+        .with_compression(opentelemetry_otlp::Compression::Zstd)
+        .with_protocol(Protocol::Grpc)
+        .with_timeout(opentelemetry_otlp::OTEL_EXPORTER_OTLP_TIMEOUT_DEFAULT)
+        .build()?;
 
     let builder =
         OpentelemetryLogBuilder::new(config.open_telemetry.service_name.to_owned(), log_exporter);
 
-    builder
+    Ok(builder
         .label(
             "service.name",
             config.open_telemetry.service_name.to_owned(),
         )
-        .build()
+        .make_body(MakeBodyLayout::new(JsonLayout::default()))
+        .build())
 }
 
-pub fn init_tracing_reporter(config: &NailConfig) {
+pub fn init_tracing_reporter(config: &NailConfig) -> Result<()> {
     let reporter = OpenTelemetryReporter::new(
         SpanExporter::builder()
             .with_tonic()
@@ -34,9 +44,7 @@ pub fn init_tracing_reporter(config: &NailConfig) {
             .with_protocol(Protocol::Grpc)
             .with_timeout(opentelemetry_otlp::OTEL_EXPORTER_OTLP_TIMEOUT_DEFAULT)
             .with_compression(opentelemetry_otlp::Compression::Zstd)
-            .build()
-            .expect("initialize oltp exporter"),
-        SpanKind::Internal,
+            .build()?,
         Cow::Owned(
             Resource::builder()
                 .with_service_name(config.open_telemetry.service_name.to_owned())
@@ -48,29 +56,37 @@ pub fn init_tracing_reporter(config: &NailConfig) {
     );
 
     fastrace::set_reporter(reporter, Config::default());
+
+    Ok(())
 }
 
-pub fn init_telemetry(config: Arc<nailconfig::NailConfig>) {
-    logforth::builder()
+pub fn init_telemetry(config: Arc<nailconfig::NailConfig>) -> Result<()> {
+    let otel_logger = init_logging_reporter(config.as_ref())?;
+
+    logforth::core::builder()
         .dispatch(|d| {
-            let d = d.filter(logforth::filter::EnvFilter::from_default_env());
+            let d = d.filter(
+                logforth::filter::env_filter::EnvFilterBuilder::from_default_env_or("info").build(),
+            );
 
             if config.open_telemetry.logs {
                 d.diagnostic(logforth::diagnostic::FastraceDiagnostic::default())
                     .append(logforth::append::FastraceEvent::default())
-                    .append(init_logging_reporter(config.as_ref()))
-                    .append(logforth::append::Stderr::default())
+                    .append(otel_logger)
+                    .append(logforth::append::Stderr::default().with_layout(TextLayout::default()))
             } else {
-                d.append(logforth::append::Stderr::default())
+                d.append(logforth::append::Stderr::default().with_layout(TextLayout::default()))
             }
         })
         .apply();
 
     #[cfg(feature = "tracing")]
     if config.open_telemetry.traces {
-        init_tracing_reporter(config.as_ref());
+        init_tracing_reporter(config.as_ref())?;
     }
 
     log::info!("Welcome to Nailpit!");
-    log::info!("Loaded config: {config:?}");
+    log::info!(configuration:? = config; "Loaded configuration");
+
+    Ok(())
 }

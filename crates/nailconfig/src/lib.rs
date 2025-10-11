@@ -7,7 +7,7 @@ use std::ops::Deref;
 
 use color_eyre::Result;
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct NailConfig {
     pub server: ServerConfig,
     pub generator: GeneratorConfig,
@@ -16,7 +16,7 @@ pub struct NailConfig {
     pub open_telemetry: OpenTelemetryConfig,
 }
 
-#[derive(Default, serde::Deserialize)]
+#[derive(Default, serde::Serialize, serde::Deserialize)]
 pub struct PromptsList(Vec<String>);
 
 impl std::fmt::Debug for PromptsList {
@@ -33,14 +33,14 @@ impl Deref for PromptsList {
     }
 }
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ServerConfig {
     pub pit_routes: Vec<String>,
     pub socket_addr: String,
     pub worker_threads: NonZero<usize>,
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct GeneratorConfig {
     #[serde(default)]
     pub prompts: PromptsList,
@@ -56,7 +56,7 @@ pub struct GeneratorConfig {
     pub max_pit_links: usize,
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Eq, serde::Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "mode")]
 pub enum DropBehavior {
     #[default]
@@ -72,7 +72,7 @@ impl DropBehavior {
     }
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Eq, serde::Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type")]
 pub enum RateLimitingConfig {
     #[default]
@@ -94,7 +94,7 @@ pub enum RateLimitingConfig {
     },
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct OpenTelemetryConfig {
     pub endpoint: String,
     pub service_name: String,
