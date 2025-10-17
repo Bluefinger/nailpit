@@ -146,7 +146,7 @@ pub struct TemplateCursor {
 impl TemplateCursor {
     pub fn new(template: Arc<str>) -> Self {
         Self {
-            cursor: template.as_ref(),
+            cursor: Arc::as_ptr(&template),
             _template: template,
         }
     }
