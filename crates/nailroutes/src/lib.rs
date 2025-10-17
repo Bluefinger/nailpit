@@ -4,7 +4,7 @@ use axum::{Router, extract::MatchedPath, response::IntoResponse, routing::get};
 use fastrace::Span;
 use fastrace_futures::StreamExt;
 use hyper::StatusCode;
-use nailgen::{GeneratedTemplate, WarningTemplate, Template};
+use nailgen::{GeneratedTemplate, Template, WarningTemplate};
 use nailip::identify_peer;
 use nailrater::NailRaterLayer;
 use nailspicy::SpicyPayloads;
@@ -31,7 +31,7 @@ async fn warning(
                 matched,
                 config.clone_inner(),
                 inputs.get_interner(),
-                Arc::from(Template::from(generated_template)),
+                Box::new(Template::from(generated_template)),
             )
             .in_span(Span::enter_with_local_parent("Warning page stream")),
     )
@@ -51,7 +51,7 @@ async fn generated(
                 matched,
                 config.clone_inner(),
                 inputs.get_interner(),
-                Arc::from(Template::from(generated_template)),
+                Box::new(Template::from(generated_template)),
             )
             .in_span(Span::enter_with_local_parent("Generated stream")),
     )

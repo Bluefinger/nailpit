@@ -61,7 +61,7 @@ pin_project! {
         markov: MarkovGen,
         start_time: Instant,
         total_bytes: usize,
-        template: Arc<Template>,
+        template: Box<Template>,
         cursor: Box<TemplateCursor>,
         page_title: Option<Box<[u8]>>,
         #[pin]
@@ -75,7 +75,7 @@ impl MarkovStream {
         path: MatchedPath,
         config: Arc<NailConfig>,
         interner: Arc<Interner>,
-        template: Arc<Template>,
+        template: Box<Template>,
     ) -> Self {
         Self {
             path,
@@ -152,8 +152,7 @@ impl Stream for MarkovStream {
                                 continue 'outer;
                             }
                             template::TemplateState::Main => {
-                                if let Some(content) = this.template.get_static_content()
-                                 {
+                                if let Some(content) = this.template.get_static_content() {
                                     let len = buffer.len();
 
                                     buffer.extend(static_content(&content));
@@ -288,7 +287,7 @@ impl MarkovGen {
         path: MatchedPath,
         config: Arc<NailConfig>,
         interner: Arc<Interner>,
-        template: Arc<Template>,
+        template: Box<Template>,
     ) -> MarkovStream {
         MarkovStream::new(self, path, config, interner, template)
     }

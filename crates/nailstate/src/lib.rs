@@ -2,7 +2,7 @@ use std::{convert::Infallible, ops::Deref, sync::Arc};
 
 use axum::extract::{FromRef, FromRequestParts};
 use nailconfig::NailConfig;
-use nailgen::{GeneratedTemplate, WarningTemplate, MarkovGen, Template};
+use nailgen::{GeneratedTemplate, MarkovGen, Template, WarningTemplate};
 use nailkov::interner::Interner;
 use nailrng::FastRng;
 use rand::seq::IndexedRandom;

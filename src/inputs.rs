@@ -2,7 +2,7 @@ use std::{fs::read_to_string, sync::Arc};
 
 use glob::glob;
 use nailconfig::NailConfig;
-use nailgen::{GeneratedTemplate, WarningTemplate, MarkovGen, Template};
+use nailgen::{GeneratedTemplate, MarkovGen, Template, WarningTemplate};
 use nailkov::interner::Interner;
 
 /// Takes a glob for finding all input files and returns a read-only list of

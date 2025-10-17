@@ -195,7 +195,7 @@ impl TemplateCursor {
                     if !included.contains(&state) {
                         return false;
                     }
-                },
+                }
                 Err(_) => return false,
             }
         }
