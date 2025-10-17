@@ -1,14 +1,10 @@
 use std::sync::Arc;
 
-use axum::{
-    Router,
-    extract::MatchedPath,
-    response::{Html, IntoResponse},
-    routing::get,
-};
+use axum::{Router, extract::MatchedPath, response::IntoResponse, routing::get};
 use fastrace::Span;
 use fastrace_futures::StreamExt;
 use hyper::StatusCode;
+use nailgen::{GeneratedTemplate, WarningTemplate, Template};
 use nailip::identify_peer;
 use nailrater::NailRaterLayer;
 use nailspicy::SpicyPayloads;
@@ -21,11 +17,24 @@ use tower_http::{
     normalize_path::NormalizePathLayer, request_id::MakeRequestUuid,
 };
 
-static INDEX: &str = include_str!("../../../templates/warning.html");
-
 #[fastrace::trace]
-async fn index() -> Html<&'static str> {
-    Html(INDEX)
+async fn warning(
+    config: AppConfig,
+    inputs: NailInputs,
+    matched: MatchedPath,
+    generated_template: WarningTemplate,
+) -> impl IntoResponse {
+    NailResponseStream::from_stream(
+        inputs
+            .get_random_input()
+            .into_stream(
+                matched,
+                config.clone_inner(),
+                inputs.get_interner(),
+                Arc::from(Template::from(generated_template)),
+            )
+            .in_span(Span::enter_with_local_parent("Warning page stream")),
+    )
 }
 
 #[fastrace::trace]
@@ -33,12 +42,18 @@ async fn generated(
     config: AppConfig,
     inputs: NailInputs,
     matched: MatchedPath,
+    generated_template: GeneratedTemplate,
 ) -> impl IntoResponse {
     NailResponseStream::from_stream(
         inputs
             .get_random_input()
-            .into_stream(matched, config.clone_inner(), inputs.get_interner())
-            .in_span(Span::enter_with_local_parent("Nailstream")),
+            .into_stream(
+                matched,
+                config.clone_inner(),
+                inputs.get_interner(),
+                Arc::from(Template::from(generated_template)),
+            )
+            .in_span(Span::enter_with_local_parent("Generated stream")),
     )
 }
 
@@ -62,7 +77,7 @@ pub fn nail_app(state: ServerState, spicy_payload: Option<Arc<SpicyPayloads>>) -
 
 pub fn nail_route(state: ServerState) -> Router {
     let generation_routes = Router::new()
-        .route("/", get(index))
+        .route("/", get(warning))
         .route("/{*generated}", get(generated));
 
     state

@@ -13,7 +13,7 @@ async fn spawn_axum_worker(
     app: App,
     shutdown_notifier: Arc<tokio::sync::watch::Sender<()>>,
 ) -> Result<()> {
-    let state = nailstate::ServerState::new(app.config, app.inputs, app.interner);
+    let state = nailstate::ServerState::new(app.config, app.inputs, app.interner, app.templates);
     let listener = nailnet::get_tcp_socket(&state.config.server.socket_addr)?;
 
     log::info!(port:% = listener.local_addr()?; "Worker listening on");
@@ -36,9 +36,14 @@ fn main() -> Result<()> {
 
     let (inputs, interner) = nailpit::inputs::get_input_files(config.as_ref())?;
 
+    let templates = nailpit::inputs::get_template_files(config.as_ref())?;
+
     let spicy = nailspicy::get_spicy_payload(config.as_ref()).map(Arc::new);
 
-    nailpit::runtime::start(App::new(config, inputs, interner, spicy), spawn_axum_worker)?;
+    nailpit::runtime::start(
+        App::new(config, inputs, interner, spicy, templates),
+        spawn_axum_worker,
+    )?;
 
     Ok(())
 }

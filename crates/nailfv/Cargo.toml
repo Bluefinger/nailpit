@@ -11,7 +11,7 @@ rust-version.workspace = true
 workspace = true
 
 [dependencies]
-winnow = { version = "0.7.6", features = ["simd"] }
+winnow.workspace = true
 
 [dev-dependencies]
 color-eyre.workspace = true

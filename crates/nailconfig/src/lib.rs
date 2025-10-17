@@ -44,6 +44,9 @@ pub struct ServerConfig {
 pub struct GeneratorConfig {
     #[serde(default)]
     pub prompts: PromptsList,
+    pub warning_template: String,
+    pub generated_template: String,
+    pub warning_message: String,
     pub input_files: String,
     pub min_paragraph_size: usize,
     pub max_paragraph_size: Option<usize>,

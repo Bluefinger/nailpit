@@ -9,6 +9,7 @@ rust-version.workspace = true
 
 [dependencies]
 nailtrace = { path = "../nailtrace" }
+nailgen = { path = "../nailgen" }
 nailip = { path = "../nailip" }
 nailrater = { path = "../nailrater" }
 nailstate = { path = "../nailstate" }

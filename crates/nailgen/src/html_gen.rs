@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use axum::extract::MatchedPath;
 use bytes::{Bytes, BytesMut};
 use nailconfig::NailConfig;
 use nailkov::{NailKov, interner::Interner};
@@ -20,7 +21,7 @@ pub fn get_desired_size(config: &NailConfig, rng: &mut impl RngCore) -> usize {
 
 /// Generates text from the markov chain, using the tokens it outputs to pull
 /// interned text from the interner.
-fn text_generator<'a>(
+pub fn text_generator<'a>(
     interner: &'a Interner,
     chain: &'a NailKov,
     size: usize,
@@ -34,47 +35,37 @@ fn text_generator<'a>(
         .skip_while(|&text| !text.is_ascii_alphabetic())
 }
 
+pub fn static_title<'a>(text: &'a str) -> impl Iterator<Item = &'a u8> + 'a {
+    text.lines()
+        .map(|line| line.trim())
+        .next()
+        .into_iter()
+        .flat_map(|title| title.as_bytes())
+}
+
+pub fn static_content<'a>(text: &'a str) -> impl Iterator<Item = &'a u8> + 'a {
+    text.lines()
+        .skip(1)
+        .filter_map(|line| {
+            let trimmed = line.trim();
+
+            if line.is_empty() {
+                None
+            } else {
+                Some(trimmed.as_bytes())
+            }
+        })
+        .flat_map(|bytes| b"<p>".iter().chain(bytes).chain(b"</p>\n"))
+}
+
 #[fastrace::trace(enter_on_poll = true)]
 pub async fn initial_content(
+    mut buf_mut: BytesMut,
     interner: Arc<Interner>,
     chain: Arc<NailKov>,
     config: Arc<NailConfig>,
 ) -> Bytes {
-    let mut buf_mut = BytesMut::with_capacity(2048);
     let mut rng = FastRng::default();
-    buf_mut.extend_from_slice(
-        r#"<!DOCTYPE html>
-<html lang="en">
-<head>
-    "#
-        .as_bytes(),
-    );
-
-    let title_text: Vec<u8> = text_generator(&interner, &chain, 24, &mut rng)
-        .copied()
-        .collect();
-
-    buf_mut.extend_from_slice(b"<title>");
-    buf_mut.extend_from_slice(title_text.as_slice());
-    buf_mut.extend_from_slice(b"</title>\n");
-
-    buf_mut.extend_from_slice(
-        r#"    <meta charset="utf-8" />
-    <meta name="robots" content="noindex, nofollow, nosnippet, noimageindex" />
-    <meta name="referrer" content="noreferrer" />
-    <meta name="color-theme" content="dark" />
-</head>
-<body><main><article>"#
-            .as_bytes(),
-    );
-
-    buf_mut.extend_from_slice(b"<header><h1>");
-    // Consume the title string, so we don't waste the allocated space.
-    buf_mut.extend(title_text);
-    buf_mut.extend_from_slice(b"</h1></header>\n");
-
-    // Allow other tasks to run before we complete the initial content payload
-    futures_lite::future::yield_now().await;
 
     // Randomise how many initial paragraphs we want
     let max_paras: u32 = rng.random_range(1..=3);
@@ -134,32 +125,51 @@ pub async fn main_content(
 }
 
 #[fastrace::trace]
-pub fn footer(interner: &Interner, chain: &NailKov, route: &str, config: &NailConfig) -> Bytes {
+pub fn extra(buf_mut: &mut BytesMut, config: &NailConfig) -> usize {
     let mut rng = FastRng::default();
-    let mut footer = BytesMut::with_capacity(512);
+
+    let mut written = 0;
 
     if let Some(prompt) = match config.generator.prompts.len() {
         0 => None,
         1 => config.generator.prompts.first(),
         _ => config.generator.prompts.choose(&mut rng),
     } {
-        footer.extend_from_slice(b"<p>");
-        footer.extend_from_slice(prompt.as_bytes());
-        footer.extend_from_slice(b"</p>");
+        buf_mut.extend_from_slice(b"<p>");
+        buf_mut.extend_from_slice(prompt.as_bytes());
+        buf_mut.extend_from_slice(b"</p>");
+
+        written += prompt.len();
     }
 
-    footer.extend_from_slice(b"</article></main>\n<footer>");
+    written
+}
+
+#[fastrace::trace]
+pub async fn footer(
+    mut buf_mut: BytesMut,
+    interner: Arc<Interner>,
+    chain: Arc<NailKov>,
+    path: MatchedPath,
+    config: Arc<NailConfig>,
+) -> Bytes {
+    let mut rng = FastRng::default();
+
+    let route = path
+        .as_str()
+        .strip_suffix("/{*generated}")
+        .unwrap_or_else(|| path.as_str());
+
     links(
-        interner,
-        chain,
+        &interner,
+        &chain,
         route,
         config.generator.max_pit_links,
         &mut rng,
-        &mut footer,
+        &mut buf_mut,
     );
-    footer.extend_from_slice(b"</footer>\n</body>\n</html>");
 
-    footer.freeze()
+    buf_mut.freeze()
 }
 
 fn paragraph<'a>(
