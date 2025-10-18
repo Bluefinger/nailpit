@@ -39,12 +39,16 @@ where
     type Data = Bytes;
     type Error = Infallible;
 
+    #[inline]
     fn poll_frame(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
         match self.stream.poll_next(cx) {
-            Poll::Ready(payload) => Poll::Ready(payload.map(Frame::data).map(Ok)),
+            Poll::Ready(payload) => match payload {
+                Some(bytes) => Poll::Ready(Some(Ok(Frame::data(bytes)))),
+                None => Poll::Ready(None),
+            },
             Poll::Pending => Poll::Pending,
         }
     }

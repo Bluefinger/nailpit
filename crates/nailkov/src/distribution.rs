@@ -17,6 +17,7 @@ pub struct TokenWeights {
 }
 
 impl Distribution<Token> for TokenWeights {
+    #[inline]
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Token {
         // SAFETY: The sampled index from `dist` will always correspond to a valid
         // token in the `choices` slice.

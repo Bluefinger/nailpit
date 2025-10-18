@@ -73,6 +73,7 @@ tower-http = { version = "0.6.2", features = [
 opentelemetry = { version = "0.31.0", default-features = false, features = ["trace", "logs"] }
 opentelemetry-otlp = { version = "0.31.0", default-features = false, features = ["trace", "logs", "grpc-tonic", "zstd-tonic"] }
 opentelemetry_sdk = { version = "0.31.0", default-features = false, features = ["trace", "logs"] }
+winnow = { version = "0.7.6", features = ["simd"] }
 
 [package]
 name = "nailpit"

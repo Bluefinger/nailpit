@@ -41,6 +41,7 @@ impl From<Token> for InternedString {
 impl Deref for Token {
     type Target = InternedString;
 
+    #[inline]
     fn deref(&self) -> &Self::Target {
         &self.0
     }
@@ -100,6 +101,7 @@ impl TokenPair {
 }
 
 impl AsRef<TokenPair> for TokenPair {
+    #[inline]
     fn as_ref(&self) -> &TokenPair {
         self
     }

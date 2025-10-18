@@ -12,6 +12,7 @@ impl InternedString {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(align(16))]
 struct StringPtr(*const str);
 
 impl StringPtr {

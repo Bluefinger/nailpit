@@ -63,6 +63,7 @@ pub struct NailKovIter<'a, R: RngCore> {
 impl<R: RngCore> Iterator for NailKovIter<'_, R> {
     type Item = Token;
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         let next_token = self.chain.generate_next_token(&mut self.rng, self.prev)?;
 
@@ -73,30 +74,29 @@ impl<R: RngCore> Iterator for NailKovIter<'_, R> {
 }
 
 impl NailKov {
+    #[inline]
     fn generate_next_token(&self, rng: &mut impl RngCore, prev: TokenPair) -> Option<Token> {
-        self.chain.get(&prev).map(|dist| dist.sample(rng))
+        match self.chain.get(&prev) {
+            Some(dist) => Some(dist.sample(rng)),
+            None => None,
+        }
     }
 
+    #[inline]
     pub fn generate_tokens<'a, R: RngCore>(
         &'a self,
         rng: &'a mut R,
-    ) -> impl Iterator<Item = Token> {
-        self.starting_token_pair(rng)
-            .map(|&prev| NailKovIter {
-                prev,
-                rng,
-                chain: self,
-            })
-            .into_iter()
-            .flatten()
+    ) -> NailKovIter<'a, R> {
+        NailKovIter {
+            prev: self.starting_token_pair(rng),
+            chain: self,
+            rng,
+        }
     }
 
-    fn pairs(&self) -> impl Iterator<Item = &TokenPair> {
-        self.chain.keys()
-    }
-
-    fn starting_token_pair(&self, rng: &mut impl RngCore) -> Option<&TokenPair> {
-        self.pairs().choose(rng)
+    #[inline]
+    fn starting_token_pair(&self, rng: &mut impl RngCore) -> TokenPair {
+        self.chain.keys().choose(rng).copied().unwrap()
     }
 }
 

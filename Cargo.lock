@@ -1073,6 +1073,7 @@ dependencies = [
  "rand",
  "tokio",
  "tokio-stream",
+ "winnow",
 ]
 
 [[package]]
@@ -1196,6 +1197,7 @@ dependencies = [
  "fastrace",
  "fastrace-futures",
  "hyper",
+ "nailgen",
  "nailip",
  "nailrater",
  "nailspicy",

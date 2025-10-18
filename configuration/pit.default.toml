@@ -5,6 +5,9 @@ worker_threads = 1
 
 [generator]
 input_files = "input/*.txt"
+warning_template = "templates/warning.html"
+warning_message = "templates/message.txt"
+generated_template = "templates/generated.html"
 min_paragraph_size = 128
 max_paragraph_size = 256
 max_pit_links = 4

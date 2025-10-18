@@ -2,7 +2,7 @@ use std::{convert::Infallible, ops::Deref, sync::Arc};
 
 use axum::extract::{FromRef, FromRequestParts};
 use nailconfig::NailConfig;
-use nailgen::MarkovGen;
+use nailgen::{GeneratedTemplate, MarkovGen, Template, WarningTemplate};
 use nailkov::interner::Interner;
 use nailrng::FastRng;
 use rand::seq::IndexedRandom;
@@ -12,11 +12,20 @@ use rand::seq::IndexedRandom;
 pub struct NailInputs {
     chains: Arc<[MarkovGen]>,
     interner: Arc<Interner>,
+    templates: Arc<[Template]>,
 }
 
 impl NailInputs {
-    pub fn new(chains: Arc<[MarkovGen]>, interner: Arc<Interner>) -> Self {
-        Self { chains, interner }
+    pub fn new(
+        chains: Arc<[MarkovGen]>,
+        interner: Arc<Interner>,
+        templates: Arc<[Template]>,
+    ) -> Self {
+        Self {
+            chains,
+            interner,
+            templates,
+        }
     }
 
     /// Pulls a random markov chain from the available list. Returns a cloned
@@ -35,6 +44,32 @@ impl NailInputs {
 
     pub fn get_interner(&self) -> Arc<Interner> {
         self.interner.clone()
+    }
+
+    pub fn get_warning_template(&self) -> WarningTemplate {
+        self.templates
+            .iter()
+            .find_map(|template| {
+                if let Template::Warning(template) = template {
+                    Some(template.clone())
+                } else {
+                    None
+                }
+            })
+            .expect("There must be a Generated template")
+    }
+
+    pub fn get_generated_template(&self) -> GeneratedTemplate {
+        self.templates
+            .iter()
+            .find_map(|template| {
+                if let Template::Generated(template) = template {
+                    Some(template.clone())
+                } else {
+                    None
+                }
+            })
+            .expect("There must be a Generated template")
     }
 }
 
@@ -79,12 +114,17 @@ impl ServerState {
         config: impl Into<AppConfig>,
         chains: Arc<[MarkovGen]>,
         interner: Arc<Interner>,
+        templates: Arc<[Template]>,
     ) -> Self {
         let config = config.into();
 
         Self {
             config,
-            inputs: NailInputs { chains, interner },
+            inputs: NailInputs {
+                chains,
+                interner,
+                templates,
+            },
         }
     }
 }
@@ -100,6 +140,20 @@ impl FromRef<ServerState> for NailInputs {
     #[inline]
     fn from_ref(input: &ServerState) -> Self {
         input.inputs.clone()
+    }
+}
+
+impl FromRef<ServerState> for WarningTemplate {
+    #[inline]
+    fn from_ref(input: &ServerState) -> Self {
+        input.inputs.get_warning_template()
+    }
+}
+
+impl FromRef<ServerState> for GeneratedTemplate {
+    #[inline]
+    fn from_ref(input: &ServerState) -> Self {
+        input.inputs.get_generated_template()
     }
 }
 
@@ -132,5 +186,37 @@ where
         state: &S,
     ) -> Result<Self, Self::Rejection> {
         Ok(NailInputs::from_ref(state))
+    }
+}
+
+impl FromRequestParts<ServerState> for WarningTemplate
+where
+    WarningTemplate: FromRef<ServerState>,
+    ServerState: Send + Sync,
+{
+    type Rejection = Infallible;
+
+    #[fastrace::trace]
+    async fn from_request_parts(
+        _parts: &mut axum::http::request::Parts,
+        state: &ServerState,
+    ) -> Result<Self, Self::Rejection> {
+        Ok(WarningTemplate::from_ref(state))
+    }
+}
+
+impl FromRequestParts<ServerState> for GeneratedTemplate
+where
+    GeneratedTemplate: FromRef<ServerState>,
+    ServerState: Send + Sync,
+{
+    type Rejection = Infallible;
+
+    #[fastrace::trace]
+    async fn from_request_parts(
+        _parts: &mut axum::http::request::Parts,
+        state: &ServerState,
+    ) -> Result<Self, Self::Rejection> {
+        Ok(GeneratedTemplate::from_ref(state))
     }
 }

@@ -1,8 +1,8 @@
-use std::sync::Arc;
+use std::{fs::read_to_string, sync::Arc};
 
 use glob::glob;
 use nailconfig::NailConfig;
-use nailgen::MarkovGen;
+use nailgen::{GeneratedTemplate, MarkovGen, Template, WarningTemplate};
 use nailkov::interner::Interner;
 
 /// Takes a glob for finding all input files and returns a read-only list of
@@ -26,4 +26,19 @@ pub fn get_input_files(
     }
 
     Ok((inputs, Arc::new(interner)))
+}
+
+pub fn get_template_files(config: &NailConfig) -> color_eyre::Result<Arc<[Template]>> {
+    let (index, content) = (
+        read_to_string(&config.generator.warning_template)?,
+        read_to_string(&config.generator.warning_message)?,
+    );
+    let generated = read_to_string(&config.generator.generated_template)?;
+
+    let templates = [
+        Template::Warning(WarningTemplate::init(index.into(), content.into())?),
+        Template::Generated(GeneratedTemplate::init(generated.into())?),
+    ];
+
+    Ok(Arc::from(templates))
 }

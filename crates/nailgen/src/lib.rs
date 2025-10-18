@@ -10,21 +10,27 @@ use std::{
 };
 
 use axum::extract::MatchedPath;
-use bytes::Bytes;
+use bytes::{Bytes, BytesMut};
 use color_eyre::Result;
 use futures_lite::{FutureExt, Stream};
 use nailconfig::NailConfig;
 use nailkov::{NailKov, interner::Interner};
+use nailrng::FastRng;
 use pin_project_lite::pin_project;
 use tokio::time::Sleep;
 
 use crate::{
     delay::delay_output,
-    html_gen::{footer, initial_content, main_content},
+    html_gen::{
+        extra, footer, initial_content, main_content, static_content, static_title, text_generator,
+    },
 };
+
+pub use crate::template::*;
 
 mod delay;
 mod html_gen;
+mod template;
 
 #[derive(Clone)]
 pub struct MarkovGen {
@@ -34,15 +40,15 @@ pub struct MarkovGen {
 pin_project! {
     #[project = GeneratorStateProj]
     enum GeneratorState {
-        Header,
-        MainContent,
+        Template,
+        Content,
         GeneratingContent {
             handle: Pin<Box<dyn Future<Output = Bytes> + Send>>,
+            keep_generating: bool,
         },
         Delay {
             delay: Pin<Box<Sleep>>
         },
-        Footer,
         Finished,
     }
 }
@@ -55,6 +61,9 @@ pin_project! {
         markov: MarkovGen,
         start_time: Instant,
         total_bytes: usize,
+        template: Box<Template>,
+        cursor: Box<TemplateCursor>,
+        page_title: Option<Box<[u8]>>,
         #[pin]
         state: GeneratorState,
     }
@@ -66,6 +75,7 @@ impl MarkovStream {
         path: MatchedPath,
         config: Arc<NailConfig>,
         interner: Arc<Interner>,
+        template: Box<Template>,
     ) -> Self {
         Self {
             path,
@@ -74,7 +84,10 @@ impl MarkovStream {
             markov,
             total_bytes: 0,
             start_time: Instant::now(),
-            state: GeneratorState::Header,
+            state: GeneratorState::Template,
+            cursor: Box::new(TemplateCursor::new(template.get_template())),
+            template,
+            page_title: None,
         }
     }
 }
@@ -89,97 +102,170 @@ impl Stream for MarkovStream {
     ) -> Poll<Option<Self::Item>> {
         let mut this = self.as_mut().project();
 
-        loop {
+        'outer: loop {
             match this.state.as_mut().project() {
-                GeneratorStateProj::Header => {
-                    this.state.set(GeneratorState::GeneratingContent {
-                        handle: initial_content(
-                            this.interner.clone(),
-                            this.markov.chain.clone(),
-                            this.config.clone(),
-                        )
-                        .boxed(),
-                    });
+                GeneratorStateProj::Template => {
+                    let mut buffer = BytesMut::new();
 
-                    continue;
+                    'inner: loop {
+                        match this.cursor.write_template(&mut buffer) {
+                            template::TemplateState::Title => {
+                                let title = this.page_title.get_or_insert_with(|| {
+                                    this.template.get_static_content().as_deref().map_or_else(
+                                        || {
+                                            let mut rng = FastRng::default();
+
+                                            text_generator(
+                                                this.interner,
+                                                &this.markov.chain,
+                                                24,
+                                                &mut rng,
+                                            )
+                                            .copied()
+                                            .collect()
+                                        },
+                                        |title| static_title(title).copied().collect(),
+                                    )
+                                });
+
+                                *this.total_bytes += title.len();
+
+                                buffer.extend_from_slice(title);
+
+                                continue 'inner;
+                            }
+                            template::TemplateState::Initial => {
+                                let handle = initial_content(
+                                    buffer,
+                                    this.interner.clone(),
+                                    this.markov.chain.clone(),
+                                    this.config.clone(),
+                                )
+                                .boxed();
+
+                                this.state.set(GeneratorState::GeneratingContent {
+                                    handle,
+                                    keep_generating: false,
+                                });
+
+                                continue 'outer;
+                            }
+                            template::TemplateState::Main => {
+                                if let Some(content) = this.template.get_static_content() {
+                                    let len = buffer.len();
+
+                                    buffer.extend(static_content(&content));
+
+                                    this.state.set(GeneratorState::Template);
+
+                                    let len = buffer.len() - len;
+
+                                    *this.total_bytes += len;
+
+                                    continue 'inner;
+                                } else {
+                                    this.state.set(GeneratorState::Content);
+
+                                    continue 'outer;
+                                }
+                            }
+                            template::TemplateState::Extra => {
+                                let bytes = extra(&mut buffer, this.config);
+
+                                *this.total_bytes += bytes;
+
+                                continue 'inner;
+                            }
+                            template::TemplateState::Footer => {
+                                let handle = footer(
+                                    buffer,
+                                    this.interner.clone(),
+                                    this.markov.chain.clone(),
+                                    this.path.clone(),
+                                    this.config.clone(),
+                                )
+                                .boxed();
+
+                                this.state.set(GeneratorState::GeneratingContent {
+                                    handle,
+                                    keep_generating: false,
+                                });
+
+                                continue 'outer;
+                            }
+                            template::TemplateState::Finished => {
+                                let elapsed_time = this.start_time.elapsed().as_micros();
+
+                                log::trace!(
+                                    "payload.size" = *this.total_bytes,
+                                    "duration.us" = elapsed_time;
+                                    "Stream finished in {:.2}ms", (elapsed_time as f32) * 1e-3
+                                );
+
+                                this.state.set(GeneratorState::Finished);
+                                continue 'outer;
+                            }
+                        }
+                    }
                 }
-                GeneratorStateProj::MainContent => {
+                GeneratorStateProj::Content => {
                     let time_limit = Duration::from_secs(this.config.generator.timeout);
 
                     if time_limit.as_secs() > 0
                         && this.start_time.elapsed().as_secs() >= time_limit.as_secs()
                     {
-                        this.state.set(GeneratorState::Footer);
-                        continue;
+                        this.state.set(GeneratorState::Template);
+                        continue 'outer;
                     }
 
                     if *this.total_bytes >= (this.config.generator.payload_size * 1024) {
-                        this.state.set(GeneratorState::Footer);
-                        continue;
+                        this.state.set(GeneratorState::Template);
+                        continue 'outer;
                     }
+
+                    let handle = main_content(
+                        this.interner.clone(),
+                        this.markov.chain.clone(),
+                        this.config.clone(),
+                    )
+                    .boxed();
 
                     this.state.set(GeneratorState::GeneratingContent {
-                        handle: main_content(
-                            this.interner.clone(),
-                            this.markov.chain.clone(),
-                            this.config.clone(),
-                        )
-                        .boxed(),
+                        handle,
+                        keep_generating: true,
                     });
-
-                    continue;
                 }
-                GeneratorStateProj::GeneratingContent { handle } => {
-                    match handle.as_mut().poll(cx) {
-                        Poll::Ready(content) => {
-                            *this.total_bytes += content.len();
+                GeneratorStateProj::GeneratingContent {
+                    handle,
+                    keep_generating,
+                } => match handle.as_mut().poll(cx) {
+                    Poll::Ready(content) => {
+                        *this.total_bytes += content.len();
 
-                            if let Some(delay) = delay_output(this.config) {
-                                this.state.set(GeneratorState::Delay {
-                                    delay: Box::pin(delay),
-                                });
-                            } else {
-                                this.state.set(GeneratorState::MainContent);
-                            }
-
-                            return Poll::Ready(Some(content));
+                        if let Some(delay) = delay_output(this.config) {
+                            this.state.set(GeneratorState::Delay {
+                                delay: Box::pin(delay),
+                            });
+                        } else if *keep_generating {
+                            this.state.set(GeneratorState::Content);
+                        } else {
+                            this.state.set(GeneratorState::Template);
                         }
-                        Poll::Pending => return Poll::Pending,
+
+                        return Poll::Ready(Some(content));
                     }
-                }
+                    Poll::Pending => return Poll::Pending,
+                },
                 GeneratorStateProj::Delay { delay } => match delay.as_mut().poll(cx) {
                     Poll::Ready(_) => {
-                        this.state.set(GeneratorState::MainContent);
+                        this.state.set(GeneratorState::Content);
                         continue;
                     }
                     Poll::Pending => return Poll::Pending,
                 },
-                GeneratorStateProj::Footer => {
-                    let content = footer(
-                        this.interner,
-                        this.markov.chain.as_ref(),
-                        this.path
-                            .as_str()
-                            .strip_suffix("/{*generated}")
-                            .unwrap_or_else(|| this.path.as_str()),
-                        this.config,
-                    );
-
-                    *this.total_bytes += content.len();
-
-                    this.state.set(GeneratorState::Finished);
-
-                    let elapsed_time = this.start_time.elapsed().as_micros();
-
-                    log::trace!(
-                        "payload.size" = *this.total_bytes,
-                        "duration.us" = elapsed_time;
-                        "Stream finished in {:.2}ms", (elapsed_time as f32) * 1e-3
-                    );
-
-                    return Poll::Ready(Some(content));
+                GeneratorStateProj::Finished => {
+                    return Poll::Ready(None);
                 }
-                GeneratorStateProj::Finished => return Poll::Ready(None),
             }
         }
     }
@@ -200,7 +286,8 @@ impl MarkovGen {
         path: MatchedPath,
         config: Arc<NailConfig>,
         interner: Arc<Interner>,
+        template: Box<Template>,
     ) -> MarkovStream {
-        MarkovStream::new(self, path, config, interner)
+        MarkovStream::new(self, path, config, interner, template)
     }
 }
