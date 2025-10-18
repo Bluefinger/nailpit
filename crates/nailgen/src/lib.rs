@@ -111,11 +111,8 @@ impl Stream for MarkovStream {
                         match this.cursor.write_template(&mut buffer) {
                             template::TemplateState::Title => {
                                 let title = this.page_title.get_or_insert_with(|| {
-                                    this.template
-                                        .get_static_content()
-                                        .as_deref()
-                                        .map(|title| static_title(title).copied().collect())
-                                        .unwrap_or_else(|| {
+                                    this.template.get_static_content().as_deref().map_or_else(
+                                        || {
                                             let mut rng = FastRng::default();
 
                                             text_generator(
@@ -126,7 +123,9 @@ impl Stream for MarkovStream {
                                             )
                                             .copied()
                                             .collect()
-                                        })
+                                        },
+                                        |title| static_title(title).copied().collect(),
+                                    )
                                 });
 
                                 *this.total_bytes += title.len();
