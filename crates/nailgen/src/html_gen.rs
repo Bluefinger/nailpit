@@ -30,8 +30,7 @@ pub fn text_generator<'a>(
     chain
         .generate_tokens(rng)
         .take(size)
-        .filter_map(|token| interner.lookup_bytes(token))
-        .flatten()
+        .flat_map(|token| interner.lookup_bytes(token))
         .skip_while(|&text| !text.is_ascii_alphabetic())
 }
 

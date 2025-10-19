@@ -11,7 +11,7 @@ use axum::{
     http::{HeaderValue, Response},
     response::IntoResponse,
 };
-use futures_lite::{Stream, StreamExt};
+use futures_lite::Stream;
 use hyper::{
     body::{Bytes, Frame},
     header::CONTENT_TYPE,
@@ -44,7 +44,7 @@ where
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
-        match self.stream.poll_next(cx) {
+        match core::pin::pin!(&mut self.stream).poll_next(cx) {
             Poll::Ready(payload) => match payload {
                 Some(bytes) => Poll::Ready(Some(Ok(Frame::data(bytes)))),
                 None => Poll::Ready(None),
