@@ -15,6 +15,7 @@ nailrater = { path = "../nailrater" }
 nailstate = { path = "../nailstate" }
 nailstream = { path = "../nailstream" }
 nailspicy = { path = "../nailspicy" }
+nailrng = { path = "../nailrng" }
 axum = { workspace = true, features = ["original-uri"] }
 hyper.workspace = true
 fastrace.workspace = true

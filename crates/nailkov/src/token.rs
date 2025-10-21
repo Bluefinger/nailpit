@@ -4,7 +4,7 @@ use crate::interner::InternedString;
 
 /// Representation of a string segment.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-#[repr(transparent)]
+#[repr(C, align(4))]
 pub struct Token(InternedString);
 
 impl Token {
@@ -25,14 +25,14 @@ impl Token {
 }
 
 impl From<InternedString> for Token {
-    #[inline]
+    #[inline(always)]
     fn from(value: InternedString) -> Self {
         Self::new(value)
     }
 }
 
 impl From<Token> for InternedString {
-    #[inline]
+    #[inline(always)]
     fn from(value: Token) -> Self {
         value.id()
     }
@@ -67,7 +67,7 @@ pub struct TokenPair {
 // By not short-circuiting in comparisons, we get better codegen.
 // See <https://github.com/rust-lang/rust/issues/117800>
 impl PartialEq for TokenPair {
-    #[inline]
+    #[inline(always)]
     fn eq(&self, other: &TokenPair) -> bool {
         // By using `to_bits`, the codegen can be optimized out even
         // further potentially. Relies on the correct alignment/field
@@ -79,19 +79,16 @@ impl PartialEq for TokenPair {
 impl Eq for TokenPair {}
 
 impl core::hash::Hash for TokenPair {
-    #[inline]
+    #[inline(always)]
     fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
         self.to_bits().hash(state);
     }
 }
 
 impl TokenPair {
-    #[inline]
-    pub fn new<T: Into<Token>>(left: T, right: T) -> Self {
-        Self {
-            left: left.into(),
-            right: right.into(),
-        }
+    #[inline(always)]
+    pub const fn new(left: Token, right: Token) -> Self {
+        Self { left, right }
     }
 
     #[inline(always)]

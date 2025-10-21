@@ -1,8 +1,9 @@
 use std::{fs::read_to_string, sync::Arc};
 
 use glob::glob;
+use nailbox::{arc_within, try_arc_within};
 use nailconfig::NailConfig;
-use nailgen::{GeneratedTemplate, MarkovGen, Template, WarningTemplate};
+use nailgen::{GeneratedTemplate, MarkovGen, Template, TemplateError, WarningTemplate};
 use nailkov::interner::Interner;
 
 /// Takes a glob for finding all input files and returns a read-only list of
@@ -10,12 +11,14 @@ use nailkov::interner::Interner;
 pub fn get_input_files(
     config: &NailConfig,
 ) -> color_eyre::Result<(Arc<[MarkovGen]>, Arc<Interner>)> {
-    let mut interner = Interner::with_capacity(512);
+    let mut interner = arc_within(|| Interner::with_capacity(512));
+
+    let interned_mut = Arc::get_mut(&mut interner).unwrap();
 
     let inputs = glob(&config.generator.input_files)?
         .filter_map(|path| path.inspect_err(|err| log::error!("IO Error: {err}")).ok())
         .filter_map(|input| {
-            MarkovGen::new(input, &mut interner)
+            MarkovGen::new(input, interned_mut)
                 .inspect_err(|err| log::error!("Markov Error: {err}"))
                 .ok()
         })
@@ -25,7 +28,7 @@ pub fn get_input_files(
         color_eyre::eyre::bail!("No input files found! Exiting...");
     }
 
-    Ok((inputs, Arc::new(interner)))
+    Ok((inputs, interner))
 }
 
 pub fn get_template_files(config: &NailConfig) -> color_eyre::Result<Arc<[Template]>> {
@@ -35,10 +38,12 @@ pub fn get_template_files(config: &NailConfig) -> color_eyre::Result<Arc<[Templa
     );
     let generated = read_to_string(&config.generator.generated_template)?;
 
-    let templates = [
-        Template::Warning(WarningTemplate::init(index.into(), content.into())?),
-        Template::Generated(GeneratedTemplate::init(generated.into())?),
-    ];
+    let templates = try_arc_within(|| -> Result<[Template; 2], TemplateError> {
+        Ok([
+            Template::Warning(WarningTemplate::init(index.into(), content.into())?),
+            Template::Generated(GeneratedTemplate::init(generated.into())?),
+        ])
+    })?;
 
-    Ok(Arc::from(templates))
+    Ok(templates)
 }

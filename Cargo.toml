@@ -113,6 +113,7 @@ nailotel = { path = "crates/nailotel" }
 nailroutes = { path = "crates/nailroutes" }
 nailspicy = { path = "crates/nailspicy" }
 nailnet = { path = "crates/nailnet" }
+nailbox = { path = "crates/nailbox" }
 axum.workspace = true
 tokio.workspace = true
 color-eyre.workspace = true
@@ -125,6 +126,6 @@ mimalloc-safe = { version = "0.1.50", optional = true }
 [profile.release]
 codegen-units = 1
 lto = "fat"
-debug = false
+debug = true
 panic = "abort"
-strip = true
+strip = false

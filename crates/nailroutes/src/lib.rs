@@ -7,14 +7,17 @@ use hyper::StatusCode;
 use nailgen::{GeneratedTemplate, Template, WarningTemplate};
 use nailip::identify_peer;
 use nailrater::NailRaterLayer;
+use nailrng::FastRng;
 use nailspicy::SpicyPayloads;
 use nailstate::{AppConfig, NailInputs, ServerState};
 use nailstream::NailResponseStream;
 use nailtrace::tracing_root_span;
 use tower::ServiceBuilder;
 use tower_http::{
-    CompressionLevel, ServiceBuilderExt, compression::CompressionLayer,
-    normalize_path::NormalizePathLayer, request_id::MakeRequestUuid,
+    CompressionLevel, ServiceBuilderExt,
+    compression::{CompressionLayer, DefaultPredicate, Predicate, predicate::SizeAbove},
+    normalize_path::NormalizePathLayer,
+    request_id::MakeRequestUuid,
 };
 
 #[fastrace::trace]
@@ -24,14 +27,17 @@ async fn warning(
     matched: MatchedPath,
     generated_template: WarningTemplate,
 ) -> impl IntoResponse {
+    let mut rng = FastRng::default();
+
     NailResponseStream::from_stream(
         inputs
-            .get_random_input()
+            .get_random_input(&mut rng)
             .into_stream(
                 matched,
                 config.clone_inner(),
                 inputs.get_interner(),
-                Box::new(Template::from(generated_template)),
+                Template::from(generated_template),
+                rng,
             )
             .in_span(Span::enter_with_local_parent("Warning page stream")),
     )
@@ -44,14 +50,17 @@ async fn generated(
     matched: MatchedPath,
     generated_template: GeneratedTemplate,
 ) -> impl IntoResponse {
+    let mut rng = FastRng::default();
+
     NailResponseStream::from_stream(
         inputs
-            .get_random_input()
+            .get_random_input(&mut rng)
             .into_stream(
                 matched,
                 config.clone_inner(),
                 inputs.get_interner(),
-                Box::new(Template::from(generated_template)),
+                Template::from(generated_template),
+                rng,
             )
             .in_span(Span::enter_with_local_parent("Generated stream")),
     )
@@ -67,7 +76,11 @@ pub fn nail_app(state: ServerState, spicy_payload: Option<Arc<SpicyPayloads>>) -
                 .layer(axum::middleware::from_fn(identify_peer))
                 .layer(axum::middleware::from_fn(tracing_root_span))
                 .layer(NormalizePathLayer::trim_trailing_slash())
-                .layer(CompressionLayer::new().quality(CompressionLevel::Default))
+                .layer(
+                    CompressionLayer::new()
+                        .quality(CompressionLevel::Default)
+                        .compress_when(DefaultPredicate::new().and(SizeAbove::new(1024))),
+                )
                 .layer(NailRaterLayer::new(rate_limiting, spicy_payload))
                 .propagate_x_request_id(),
         )

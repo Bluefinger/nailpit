@@ -1038,11 +1038,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "nailbox"
+version = "0.1.0"
+
+[[package]]
 name = "nailconfig"
 version = "0.1.0"
 dependencies = [
  "color-eyre",
  "config",
+ "nailbox",
  "serde",
 ]
 
@@ -1065,6 +1070,7 @@ dependencies = [
  "fastrace-futures",
  "futures-lite",
  "log",
+ "nailbox",
  "nailconfig",
  "nailkov",
  "nailrng",
@@ -1145,6 +1151,7 @@ dependencies = [
  "log",
  "logforth-bridge-log",
  "mimalloc-safe",
+ "nailbox",
  "nailconfig",
  "nailgen",
  "nailip",
@@ -1169,6 +1176,7 @@ dependencies = [
  "fastrace",
  "futures-lite",
  "hyper",
+ "nailbox",
  "nailconfig",
  "nailfv",
  "nailip",
@@ -1200,6 +1208,7 @@ dependencies = [
  "nailgen",
  "nailip",
  "nailrater",
+ "nailrng",
  "nailspicy",
  "nailstate",
  "nailstream",
@@ -1214,6 +1223,7 @@ version = "0.1.0"
 dependencies = [
  "hyper",
  "log",
+ "nailbox",
  "nailconfig",
  "rapidhash",
  "scc",

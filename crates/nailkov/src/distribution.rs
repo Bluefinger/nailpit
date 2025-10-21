@@ -11,13 +11,13 @@ use crate::{RandomState, error::NailError, token::Token};
 #[derive(Clone, Debug)]
 pub struct TokenWeights {
     /// Mappings of choice indexes to their likelihood.
-    dist: WeightedAliasIndex<u64>,
+    dist: WeightedAliasIndex<u32>,
     /// The actual choices
     choices: Box<[Token]>,
 }
 
 impl Distribution<Token> for TokenWeights {
-    #[inline]
+    #[inline(always)]
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Token {
         // SAFETY: The sampled index from `dist` will always correspond to a valid
         // token in the `choices` slice.
@@ -29,7 +29,7 @@ impl Distribution<Token> for TokenWeights {
 #[derive(Clone, Debug)]
 pub struct TokenWeightsBuilder {
     /// Counts how many times a token is likely to appear.
-    occurrences: IndexMap<Token, u64, RandomState>,
+    occurrences: IndexMap<Token, u32, RandomState>,
 }
 
 impl TokenWeightsBuilder {

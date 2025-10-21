@@ -1,7 +1,8 @@
-use indexmap::{Equivalent, IndexMap};
+use hashbrown::{Equivalent, HashMap};
 use rapidhash::fast::RandomState;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[repr(C, align(4))]
 pub struct InternedString(pub(crate) u32);
 
 impl InternedString {
@@ -9,10 +10,14 @@ impl InternedString {
     pub const fn to_bits(self) -> u32 {
         self.0
     }
+
+    #[inline(always)]
+    pub const fn to_index(self) -> usize {
+        self.0 as usize
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(align(16))]
 struct StringPtr(*const str);
 
 impl StringPtr {
@@ -42,7 +47,8 @@ unsafe impl Sync for StringPtr {}
 
 #[derive(Debug, Clone)]
 pub struct Interner {
-    collected: IndexMap<StringPtr, InternedString, RandomState>,
+    collected: HashMap<StringPtr, InternedString, RandomState>,
+    index: Vec<StringPtr>,
     buffer: String,
     stored: Vec<String>,
 }
@@ -54,17 +60,14 @@ impl Default for Interner {
 }
 
 impl Interner {
-    #[inline]
-    pub fn lookup(&self, id: impl Into<InternedString>) -> Option<&str> {
-        match self.collected.get_index(id.into().0 as usize) {
-            Some((ptr, _)) => Some(ptr.cast()),
-            None => None,
-        }
-    }
-
-    #[inline]
-    pub fn lookup_bytes(&self, id: impl Into<InternedString>) -> &[u8] {
-        self.lookup(id).unwrap().as_bytes()
+    /// # Safety
+    /// The caller must ensure that the [`InternedString`] being passed in was allocated
+    /// from the same [`Interner`] instance.
+    #[inline(always)]
+    pub unsafe fn lookup(&self, id: InternedString) -> &str {
+        // SAFETY: Safety is upheld by the caller ensuring the id was allocated
+        // from the same interner.
+        unsafe { self.index.get_unchecked(id.to_index()).cast() }
     }
 
     pub fn with_capacity(cap: usize) -> Interner {
@@ -73,7 +76,8 @@ impl Interner {
         let stored = Vec::with_capacity(8);
 
         Interner {
-            collected: IndexMap::with_hasher(RandomState::new()),
+            collected: HashMap::with_hasher(RandomState::new()),
+            index: Vec::new(),
             stored,
             buffer: String::with_capacity(cap.next_power_of_two()),
         }
@@ -88,10 +92,15 @@ impl Interner {
         // are modified outside of the method. Here we get a new StringPtr for `text` that
         // hasn't been stored before.
         let name = unsafe { self.alloc(text) };
-        let id = InternedString(self.collected.len() as u32);
+        let id = InternedString(self.index.len() as u32);
         self.collected.insert(name, id);
+        self.index.push(name);
 
-        debug_assert!(self.lookup(id).is_some_and(|id| id.equivalent(&name)));
+        // SAFETY: We are using the id allocated within the same function scope,
+        // so it is always from the same source.
+        unsafe {
+            debug_assert!(self.lookup(id).equivalent(&name));
+        }
         debug_assert!(self.intern(name.cast()) == id);
 
         id
@@ -164,7 +173,8 @@ mod tests {
 
         let id = interner.intern(text);
 
-        assert_eq!(Some(text), interner.lookup(id));
+        // SAFETY: It comes from the same source
+        unsafe { assert_eq!(text, interner.lookup(id)); }
         assert_eq!(interner.buffer.len(), 11);
 
         let again = interner.intern(text);
@@ -227,7 +237,8 @@ mod tests {
         std::thread::scope(|s| {
             s.spawn(move || {
                 for (id, expected) in interned.into_iter().zip(texts) {
-                    assert_eq!(Some(expected), interner.lookup(id));
+                    // SAFETY: It comes from the same source
+                    unsafe { assert_eq!(expected, interner.lookup(id)); }
                 }
             });
         });

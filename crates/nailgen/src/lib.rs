@@ -12,7 +12,8 @@ use std::{
 use axum::extract::MatchedPath;
 use bytes::{Bytes, BytesMut};
 use color_eyre::Result;
-use futures_lite::{FutureExt, Stream};
+use futures_lite::Stream;
+use nailbox::{boxed_future_within, try_arc_within};
 use nailconfig::NailConfig;
 use nailkov::{NailKov, interner::Interner};
 use nailrng::FastRng;
@@ -61,9 +62,10 @@ pin_project! {
         markov: MarkovGen,
         start_time: Instant,
         total_bytes: usize,
-        template: Box<Template>,
-        cursor: Box<TemplateCursor>,
+        template: Template,
+        cursor: TemplateCursor,
         page_title: Option<Box<[u8]>>,
+        rng: FastRng,
         #[pin]
         state: GeneratorState,
     }
@@ -75,7 +77,8 @@ impl MarkovStream {
         path: MatchedPath,
         config: Arc<NailConfig>,
         interner: Arc<Interner>,
-        template: Box<Template>,
+        template: Template,
+        rng: FastRng,
     ) -> Self {
         Self {
             path,
@@ -85,7 +88,8 @@ impl MarkovStream {
             total_bytes: 0,
             start_time: Instant::now(),
             state: GeneratorState::Template,
-            cursor: Box::new(TemplateCursor::new(template.get_template())),
+            cursor: TemplateCursor::new(template.get_template()),
+            rng,
             template,
             page_title: None,
         }
@@ -103,111 +107,111 @@ impl Stream for MarkovStream {
         let mut this = self.as_mut().project();
 
         'outer: loop {
+            let mut buffer = BytesMut::new();
+
             match this.state.as_mut().project() {
-                GeneratorStateProj::Template => {
-                    let mut buffer = BytesMut::new();
+                GeneratorStateProj::Template => 'inner: loop {
+                    match this.cursor.write_template(&mut buffer) {
+                        template::TemplateState::Title => {
+                            let title = this.page_title.get_or_insert_with(|| {
+                                this.template.get_static_content().map_or_else(
+                                    || {
+                                        text_generator(
+                                            this.interner,
+                                            &this.markov.chain,
+                                            24,
+                                            this.rng,
+                                        )
+                                        .copied()
+                                        .collect()
+                                    },
+                                    |title| static_title(title).copied().collect(),
+                                )
+                            });
 
-                    'inner: loop {
-                        match this.cursor.write_template(&mut buffer) {
-                            template::TemplateState::Title => {
-                                let title = this.page_title.get_or_insert_with(|| {
-                                    this.template.get_static_content().as_deref().map_or_else(
-                                        || {
-                                            let mut rng = FastRng::default();
+                            *this.total_bytes += title.len();
 
-                                            text_generator(
-                                                this.interner,
-                                                &this.markov.chain,
-                                                24,
-                                                &mut rng,
-                                            )
-                                            .copied()
-                                            .collect()
-                                        },
-                                        |title| static_title(title).copied().collect(),
-                                    )
-                                });
+                            buffer.extend_from_slice(title);
 
-                                *this.total_bytes += title.len();
-
-                                buffer.extend_from_slice(title);
-
-                                continue 'inner;
-                            }
-                            template::TemplateState::Initial => {
-                                let handle = initial_content(
+                            continue 'inner;
+                        }
+                        template::TemplateState::Initial => {
+                            let handle = boxed_future_within(|| {
+                                initial_content(
                                     buffer,
                                     this.interner.clone(),
                                     this.markov.chain.clone(),
                                     this.config.clone(),
+                                    this.rng.fork(),
                                 )
-                                .boxed();
+                            });
 
-                                this.state.set(GeneratorState::GeneratingContent {
-                                    handle,
-                                    keep_generating: false,
-                                });
+                            this.state.set(GeneratorState::GeneratingContent {
+                                handle,
+                                keep_generating: false,
+                            });
+
+                            continue 'outer;
+                        }
+                        template::TemplateState::Main => {
+                            if let Some(content) = this.template.get_static_content() {
+                                let len = buffer.len();
+
+                                buffer.extend(static_content(content));
+
+                                this.state.set(GeneratorState::Template);
+
+                                let len = buffer.len() - len;
+
+                                *this.total_bytes += len;
+
+                                continue 'inner;
+                            } else {
+                                this.state.set(GeneratorState::Content);
 
                                 continue 'outer;
                             }
-                            template::TemplateState::Main => {
-                                if let Some(content) = this.template.get_static_content() {
-                                    let len = buffer.len();
+                        }
+                        template::TemplateState::Extra => {
+                            let bytes = extra(&mut buffer, this.config, this.rng);
 
-                                    buffer.extend(static_content(&content));
+                            *this.total_bytes += bytes;
 
-                                    this.state.set(GeneratorState::Template);
-
-                                    let len = buffer.len() - len;
-
-                                    *this.total_bytes += len;
-
-                                    continue 'inner;
-                                } else {
-                                    this.state.set(GeneratorState::Content);
-
-                                    continue 'outer;
-                                }
-                            }
-                            template::TemplateState::Extra => {
-                                let bytes = extra(&mut buffer, this.config);
-
-                                *this.total_bytes += bytes;
-
-                                continue 'inner;
-                            }
-                            template::TemplateState::Footer => {
-                                let handle = footer(
+                            continue 'inner;
+                        }
+                        template::TemplateState::Footer => {
+                            let handle = boxed_future_within(|| {
+                                footer(
                                     buffer,
                                     this.interner.clone(),
                                     this.markov.chain.clone(),
                                     this.path.clone(),
                                     this.config.clone(),
+                                    this.rng.fork(),
                                 )
-                                .boxed();
+                            });
 
-                                this.state.set(GeneratorState::GeneratingContent {
-                                    handle,
-                                    keep_generating: false,
-                                });
+                            this.state.set(GeneratorState::GeneratingContent {
+                                handle,
+                                keep_generating: false,
+                            });
 
-                                continue 'outer;
-                            }
-                            template::TemplateState::Finished => {
-                                let elapsed_time = this.start_time.elapsed().as_micros();
+                            continue 'outer;
+                        }
+                        template::TemplateState::Finished => {
+                            let elapsed_time = this.start_time.elapsed().as_micros();
 
-                                log::trace!(
-                                    "payload.size" = *this.total_bytes,
-                                    "duration.us" = elapsed_time;
-                                    "Stream finished in {:.2}ms", (elapsed_time as f32) * 1e-3
-                                );
+                            log::trace!(
+                                "payload.size" = *this.total_bytes,
+                                "duration.us" = elapsed_time;
+                                "Stream finished in {:.2}ms", (elapsed_time as f32) * 1e-3
+                            );
 
-                                this.state.set(GeneratorState::Finished);
-                                continue 'outer;
-                            }
+                            this.state.set(GeneratorState::Finished);
+                            continue 'outer;
                         }
                     }
-                }
+                },
                 GeneratorStateProj::Content => {
                     let time_limit = Duration::from_secs(this.config.generator.timeout);
 
@@ -223,12 +227,15 @@ impl Stream for MarkovStream {
                         continue 'outer;
                     }
 
-                    let handle = main_content(
-                        this.interner.clone(),
-                        this.markov.chain.clone(),
-                        this.config.clone(),
-                    )
-                    .boxed();
+                    let handle = boxed_future_within(|| {
+                        main_content(
+                            buffer,
+                            this.interner.clone(),
+                            this.markov.chain.clone(),
+                            this.config.clone(),
+                            this.rng.fork(),
+                        )
+                    });
 
                     this.state.set(GeneratorState::GeneratingContent {
                         handle,
@@ -243,9 +250,7 @@ impl Stream for MarkovStream {
                         *this.total_bytes += content.len();
 
                         if let Some(delay) = delay_output(this.config) {
-                            this.state.set(GeneratorState::Delay {
-                                delay: Box::pin(delay),
-                            });
+                            this.state.set(GeneratorState::Delay { delay });
                         } else if *keep_generating {
                             this.state.set(GeneratorState::Content);
                         } else {
@@ -275,7 +280,7 @@ impl MarkovGen {
     pub fn new(input: impl AsRef<Path>, interner: &mut Interner) -> Result<Self> {
         let file = std::fs::read_to_string(input.as_ref())?;
 
-        let chain = Arc::new(NailKov::from_input(interner, &file)?);
+        let chain = try_arc_within(|| NailKov::from_input(interner, &file))?;
 
         Ok(Self { chain })
     }
@@ -286,8 +291,9 @@ impl MarkovGen {
         path: MatchedPath,
         config: Arc<NailConfig>,
         interner: Arc<Interner>,
-        template: Box<Template>,
+        template: Template,
+        rng: FastRng,
     ) -> MarkovStream {
-        MarkovStream::new(self, path, config, interner, template)
+        MarkovStream::new(self, path, config, interner, template, rng)
     }
 }

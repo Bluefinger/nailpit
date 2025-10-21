@@ -13,10 +13,11 @@ use fastrace::{
     future::{FutureExt as SpanFutureExt, InSpan},
 };
 use futures::NailedResponseFuture;
-use futures_lite::{FutureExt, future::Boxed};
+use futures_lite::future::Boxed;
 
 use hyper::HeaderMap;
 use modes::LimitModes;
+use nailbox::boxed_future_within;
 use nailconfig::RateLimitingConfig;
 use nailip::IdentifiedPeer;
 use nailspicy::{SpicyPayloadKind, SpicyPayloads};
@@ -114,12 +115,11 @@ impl<S> NailRater<S> {
     }
 
     fn prune(peers: Arc<HashMap<IpAddr, Peer, RandomState>>) -> Boxed<()> {
-        async move {
+        boxed_future_within(async move || {
             peers
                 .retain_async(|_, v| v.last_seen.elapsed() < crate::SOURCE_TIMEOUT)
                 .await
-        }
-        .boxed()
+        })
     }
 
     fn prune_recorded_peers(&mut self) -> Option<Boxed<()>> {
@@ -127,9 +127,13 @@ impl<S> NailRater<S> {
             self.schedule_pruning.replace(Instant::now());
         }
 
-        self.schedule_pruning
+        match self
+            .schedule_pruning
             .take_if(|since| since.elapsed() >= crate::SOURCE_TIMEOUT)
-            .map(|_| Self::prune(self.peers.clone()))
+        {
+            Some(_) => Some(Self::prune(self.peers.clone())),
+            None => None,
+        }
     }
 }
 
@@ -167,9 +171,9 @@ where
                     .as_ref()
                     .zip(supports_spicy)
                     .and_then(|(payloads, kind)| {
-                        payloads
-                            .peek_with(&kind, |_, payload| payload.clone())
-                            .map(|payload| NailedResponseFuture::spicy(payload, kind))
+                        payloads.peek_with(&kind, |_, payload| {
+                            NailedResponseFuture::spicy(payload.clone(), kind)
+                        })
                     })
                     .unwrap_or_else(NailedResponseFuture::dropped)
                     .in_span(parent);
