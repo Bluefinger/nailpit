@@ -148,11 +148,11 @@ impl NailBuilder {
         self.feed_tokens(
             content
                 .split_word_bounds()
-                .map(|text| interner.intern(text).into()),
+                .map(|text| interner.intern(text)),
         )
     }
 
-    fn feed_tokens<T: Iterator<Item = Token>>(mut self, tokens: T) -> Result<Self, NailError> {
+    fn feed_tokens(mut self, tokens: impl Iterator<Item = Token>) -> Result<Self, NailError> {
         let windows = tokens.tuple_windows();
 
         if windows.size_hint().1.is_none() {

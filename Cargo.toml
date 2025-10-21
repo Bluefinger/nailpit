@@ -45,11 +45,9 @@ logforth = { version = "0.28", features = [
 logforth-bridge-log = "0.2"
 unicode-segmentation = "1.12.0"
 itertools = "0.14.0"
-parking_lot = "0.12.3"
 indexmap = "2.9.0"
 tokio = { version = "1.44.2", features = [
     "rt",
-    "rt-multi-thread",
     "sync",
     "time",
     "parking_lot",
@@ -126,6 +124,6 @@ mimalloc-safe = { version = "0.1.50", optional = true }
 [profile.release]
 codegen-units = 1
 lto = "fat"
-debug = true
+debug = false
 panic = "abort"
-strip = false
+strip = true

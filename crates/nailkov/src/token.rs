@@ -1,45 +1,29 @@
 use std::ops::Deref;
 
-use crate::interner::InternedString;
-
 /// Representation of a string segment.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 #[repr(C, align(4))]
-pub struct Token(InternedString);
+pub struct Token(u32);
 
 impl Token {
     #[inline(always)]
-    pub const fn new(ptr: InternedString) -> Self {
+    pub const fn new(ptr: u32) -> Self {
         Self(ptr)
     }
 
     #[inline(always)]
-    pub const fn id(&self) -> InternedString {
+    pub(crate) const fn index(&self) -> usize {
+        self.0 as usize
+    }
+
+    #[inline(always)]
+    const fn to_bits(self) -> u32 {
         self.0
-    }
-
-    #[inline(always)]
-    pub const fn to_bits(self) -> u32 {
-        self.0.to_bits()
-    }
-}
-
-impl From<InternedString> for Token {
-    #[inline(always)]
-    fn from(value: InternedString) -> Self {
-        Self::new(value)
-    }
-}
-
-impl From<Token> for InternedString {
-    #[inline(always)]
-    fn from(value: Token) -> Self {
-        value.id()
     }
 }
 
 impl Deref for Token {
-    type Target = InternedString;
+    type Target = u32;
 
     #[inline]
     fn deref(&self) -> &Self::Target {
@@ -110,8 +94,8 @@ mod tests {
 
     #[test]
     fn token_smoke_testing() {
-        let left = Token(InternedString(0x2));
-        let right = Token(InternedString(0x2b));
+        let left = Token(0x2);
+        let right = Token(0x2b);
 
         let pair = TokenPair::new(left, right);
 
@@ -119,7 +103,7 @@ mod tests {
         assert_eq!(pair.left, left);
         assert_eq!(pair.right, right);
 
-        let other_right = Token(InternedString(0x2c));
+        let other_right = Token(0x2c);
 
         let other_pair = TokenPair::new(left, other_right);
 

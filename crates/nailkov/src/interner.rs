@@ -1,21 +1,7 @@
 use hashbrown::{Equivalent, HashMap};
 use rapidhash::fast::RandomState;
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-#[repr(C, align(4))]
-pub struct InternedString(pub(crate) u32);
-
-impl InternedString {
-    #[inline(always)]
-    pub const fn to_bits(self) -> u32 {
-        self.0
-    }
-
-    #[inline(always)]
-    pub const fn to_index(self) -> usize {
-        self.0 as usize
-    }
-}
+use crate::token::Token;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct StringPtr(*const str);
@@ -47,7 +33,7 @@ unsafe impl Sync for StringPtr {}
 
 #[derive(Debug, Clone)]
 pub struct Interner {
-    collected: HashMap<StringPtr, InternedString, RandomState>,
+    collected: HashMap<StringPtr, Token, RandomState>,
     index: Vec<StringPtr>,
     buffer: String,
     stored: Vec<String>,
@@ -61,13 +47,13 @@ impl Default for Interner {
 
 impl Interner {
     /// # Safety
-    /// The caller must ensure that the [`InternedString`] being passed in was allocated
+    /// The caller must ensure that the [`Token`] being passed in was allocated
     /// from the same [`Interner`] instance.
     #[inline(always)]
-    pub unsafe fn lookup(&self, id: InternedString) -> &str {
+    pub unsafe fn lookup(&self, id: Token) -> &str {
         // SAFETY: Safety is upheld by the caller ensuring the id was allocated
         // from the same interner.
-        unsafe { self.index.get_unchecked(id.to_index()).cast() }
+        unsafe { self.index.get_unchecked(id.index()).cast() }
     }
 
     pub fn with_capacity(cap: usize) -> Interner {
@@ -83,7 +69,7 @@ impl Interner {
         }
     }
 
-    pub fn intern(&mut self, text: &str) -> InternedString {
+    pub fn intern(&mut self, text: &str) -> Token {
         if let Some(&id) = self.collected.get(text) {
             return id;
         }
@@ -92,7 +78,7 @@ impl Interner {
         // are modified outside of the method. Here we get a new StringPtr for `text` that
         // hasn't been stored before.
         let name = unsafe { self.alloc(text) };
-        let id = InternedString(self.index.len() as u32);
+        let id = Token::new(self.index.len() as u32);
         self.collected.insert(name, id);
         self.index.push(name);
 
@@ -197,19 +183,19 @@ mod tests {
             "Gibberish",
         ];
 
-        let interned: Vec<InternedString> =
+        let interned: Vec<Token> =
             texts.iter().map(|&text| interner.intern(text)).collect();
 
         assert_eq!(
             interned.as_slice(),
             &[
-                InternedString(0),
-                InternedString(1),
-                InternedString(2),
-                InternedString(3),
-                InternedString(4),
-                InternedString(2),
-                InternedString(5)
+                Token::new(0),
+                Token::new(1),
+                Token::new(2),
+                Token::new(3),
+                Token::new(4),
+                Token::new(2),
+                Token::new(5)
             ]
         );
         assert_eq!(interner.buffer.capacity(), 64);
@@ -231,7 +217,7 @@ mod tests {
             "Gibberish",
         ];
 
-        let interned: Vec<InternedString> =
+        let interned: Vec<Token> =
             texts.iter().map(|&text| interner.intern(text)).collect();
 
         std::thread::scope(|s| {

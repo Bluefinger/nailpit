@@ -33,7 +33,7 @@ pub fn text_generator<'a>(
         .generate_tokens(rng)
         .take(size)
         // SAFETY: The id comes from the same interner that allocated it
-        .flat_map(|token| unsafe { interner.lookup(token.id()).as_bytes() })
+        .flat_map(|token| unsafe { interner.lookup(token).as_bytes() })
         .skip_while(|&text| !text.is_ascii_alphabetic())
 }
 
