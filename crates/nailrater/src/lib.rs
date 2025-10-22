@@ -26,7 +26,7 @@ use rapidhash::fast::RandomState;
 use scc::HashMap;
 use tokio::time::sleep;
 
-const SOURCE_TIMEOUT: Duration = Duration::from_secs(10 * 2);
+const SOURCE_TIMEOUT: Duration = Duration::from_secs(60 * 2);
 
 static PRUNING_SCHEDULE: RwLock<OnceLock<Instant>> = RwLock::new(OnceLock::new());
 
