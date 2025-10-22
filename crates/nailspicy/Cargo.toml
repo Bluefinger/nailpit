@@ -12,7 +12,7 @@ nailconfig = { path = "../nailconfig" }
 nailbox = { path = "../nailbox" }
 hyper.workspace = true
 rapidhash.workspace = true
-scc.workspace = true
+hashbrown.workspace = true
 log.workspace = true
 
 [lints]

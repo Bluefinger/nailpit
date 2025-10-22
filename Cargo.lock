@@ -1209,12 +1209,12 @@ dependencies = [
 name = "nailspicy"
 version = "0.1.0"
 dependencies = [
+ "hashbrown 0.15.5",
  "hyper",
  "log",
  "nailbox",
  "nailconfig",
  "rapidhash",
- "scc",
 ]
 
 [[package]]

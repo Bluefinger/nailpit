@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
+use hashbrown::HashMap;
 use hyper::{HeaderMap, body::Bytes, header::ACCEPT_ENCODING};
 use nailbox::try_arc_within;
 use nailconfig::{DropBehavior, NailConfig, RateLimitingConfig};
 use rapidhash::fast::RandomState;
-use scc::HashIndex;
 
-pub type SpicyPayloads = HashIndex<SpicyPayloadKind, Bytes, RandomState>;
+pub type SpicyPayloads = HashMap<SpicyPayloadKind, Bytes, RandomState>;
 
 static GZIP: &str = "gzip";
 static BROTLI: &str = "br";

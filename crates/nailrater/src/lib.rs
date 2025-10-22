@@ -168,14 +168,14 @@ where
             PeerState::SpicyDrop => {
                 return self
                     .spicy_payload
-                    .as_ref()
+                    .as_deref()
                     .zip(supports_spicy)
                     .and_then(|(payloads, kind)| {
-                        payloads.peek_with(&kind, |_, payload| {
-                            NailedResponseFuture::spicy(payload.clone(), kind)
-                        })
+                        payloads.get(&kind).map(|payload| (payload.clone(), kind))
                     })
-                    .unwrap_or_else(NailedResponseFuture::dropped)
+                    .map_or_else(NailedResponseFuture::dropped, |(payload, kind)| {
+                        NailedResponseFuture::spicy(payload, kind)
+                    })
                     .in_span(parent);
             }
             _ => return NailedResponseFuture::dropped().in_span(parent),
