@@ -2,7 +2,7 @@ use std::ops::Deref;
 
 /// Representation of a string segment.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-#[repr(C, align(4))]
+#[repr(transparent)]
 pub struct Token(u32);
 
 impl Token {
