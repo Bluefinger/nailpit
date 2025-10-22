@@ -3,7 +3,7 @@ mod modes;
 
 use std::{
     net::IpAddr,
-    sync::Arc,
+    sync::{Arc, OnceLock},
     time::{Duration, Instant},
 };
 
@@ -21,11 +21,14 @@ use nailbox::boxed_future_within;
 use nailconfig::RateLimitingConfig;
 use nailip::IdentifiedPeer;
 use nailspicy::{SpicyPayloadKind, SpicyPayloads};
+use parking_lot::RwLock;
 use rapidhash::fast::RandomState;
 use scc::HashMap;
 use tokio::time::sleep;
 
-const SOURCE_TIMEOUT: Duration = Duration::from_secs(60 * 2);
+const SOURCE_TIMEOUT: Duration = Duration::from_secs(10 * 2);
+
+static PRUNING_SCHEDULE: RwLock<OnceLock<Instant>> = RwLock::new(OnceLock::new());
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 enum PeerState {
@@ -71,7 +74,6 @@ impl<S> tower::Layer<S> for NailRaterLayer {
 pub struct NailRater<S> {
     peers: Arc<HashMap<IpAddr, Peer, RandomState>>,
     mode: LimitModes,
-    schedule_pruning: Option<Instant>,
     spicy_payload: Option<Arc<SpicyPayloads>>,
     inner: S,
 }
@@ -85,7 +87,6 @@ impl<S> NailRater<S> {
         Self {
             peers: Default::default(),
             mode: mode.into(),
-            schedule_pruning: None,
             spicy_payload,
             inner,
         }
@@ -116,6 +117,8 @@ impl<S> NailRater<S> {
 
     fn prune(peers: Arc<HashMap<IpAddr, Peer, RandomState>>) -> Boxed<()> {
         boxed_future_within(async move || {
+            log::trace!("PRUNING STARTED");
+
             peers
                 .retain_async(|_, v| v.last_seen.elapsed() < crate::SOURCE_TIMEOUT)
                 .await
@@ -123,16 +126,20 @@ impl<S> NailRater<S> {
     }
 
     fn prune_recorded_peers(&mut self) -> Option<Boxed<()>> {
-        if self.schedule_pruning.is_none() {
-            self.schedule_pruning.replace(Instant::now());
-        }
+        let mut lock = PRUNING_SCHEDULE.upgradable_read();
+        let since = lock.get_or_init(Instant::now);
 
-        match self
-            .schedule_pruning
-            .take_if(|since| since.elapsed() >= crate::SOURCE_TIMEOUT)
-        {
-            Some(_) => Some(Self::prune(self.peers.clone())),
-            None => None,
+        let elapsed = since.elapsed();
+
+        log::trace!("ELAPSED: {}ms", elapsed.as_millis());
+
+        if elapsed >= crate::SOURCE_TIMEOUT {
+            lock.with_upgraded(OnceLock::take);
+            drop(lock);
+
+            Some(Self::prune(self.peers.clone()))
+        } else {
+            None
         }
     }
 }
