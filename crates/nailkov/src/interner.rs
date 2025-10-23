@@ -11,7 +11,9 @@ impl StringPtr {
     const fn cast(&self) -> &str {
         // SAFETY: The pointer is stable as it points to memory that is never
         // moved/invalidated while this struct lives, therefore can be safely
-        // dereferenced back to a string slice.
+        // dereferenced back to a string slice. We own the String instance this
+        // references, and all StringPtrs are used within the same scope as the
+        // String instances, so when String drops, these will be dropped too.
         unsafe { &*self.0 }
     }
 }

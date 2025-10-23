@@ -1,4 +1,7 @@
-//! Utility crate for deferred initialisation of allocated containers
+//! Utility crate for deferred initialisation of allocated containers, to lessen stack pressure
+//! and initialise values directly on the heap. Rust _does_ optimise boxing to not require the
+//! stack and can initialise directly to the heap, but this does not occur all the time. These
+//! utils ensure this does happen, by deferring the initialisation of the allocation explicitly.
 
 use core::pin::Pin;
 use std::sync::Arc;
@@ -15,7 +18,8 @@ where
 
     boxed.write(fut());
 
-    // SAFETY: We have initialised the Box correctly.
+    // SAFETY: We have initialised the Box correctly by writing to
+    // the memory in the line above.
     unsafe { Box::into_pin(boxed.assume_init()) }
 }
 
@@ -28,7 +32,8 @@ where
 
     Arc::get_mut(&mut arced).unwrap().write(f()?);
 
-    // SAFETY: We have initialised the Arc correctly.
+    // SAFETY: We have initialised the Arc correctly by writing to
+    // the memory in the line above.
     Ok(unsafe { arced.assume_init() })
 }
 
@@ -41,7 +46,8 @@ where
 
     Arc::get_mut(&mut arced).unwrap().write(f());
 
-    // SAFETY: We have initialised the Arc correctly.
+    // SAFETY: We have initialised the Arc correctly by writing to
+    // the memory in the line above.
     unsafe { arced.assume_init() }
 }
 
