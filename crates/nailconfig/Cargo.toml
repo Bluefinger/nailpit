@@ -12,5 +12,6 @@ workspace = true
 
 [dependencies]
 serde.workspace = true
+nailbox = { path = "../nailbox" }
 config = { version = "0.15.11", default-features = false, features = ["toml"] }
 color-eyre.workspace = true

@@ -3,9 +3,10 @@
 //! from various `toml` files.
 
 use core::num::NonZero;
-use std::ops::Deref;
+use std::{ops::Deref, sync::Arc};
 
 use color_eyre::Result;
+use nailbox::try_arc_within;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct NailConfig {
@@ -105,7 +106,7 @@ pub struct OpenTelemetryConfig {
     pub traces: bool,
 }
 
-pub fn get_configuration() -> Result<NailConfig> {
+pub fn get_configuration() -> Result<Arc<NailConfig>> {
     let config_dir = std::env::current_dir()?.join("configuration");
 
     let config = config::Config::builder()
@@ -120,5 +121,7 @@ pub fn get_configuration() -> Result<NailConfig> {
         )
         .build()?;
 
-    Ok(config.try_deserialize()?)
+    let config = try_arc_within(|| config.try_deserialize())?;
+
+    Ok(config)
 }

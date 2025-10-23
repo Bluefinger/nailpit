@@ -50,16 +50,16 @@ pub enum Template {
 }
 
 impl Template {
-    pub fn get_template(&self) -> Arc<str> {
+    pub fn get_template(&self) -> &Arc<str> {
         match self {
-            Self::Warning(index_template) => index_template.template.clone(),
-            Self::Generated(generated_template) => generated_template.template.clone(),
+            Self::Warning(index_template) => &index_template.template,
+            Self::Generated(generated_template) => &generated_template.template,
         }
     }
 
-    pub fn get_static_content(&self) -> Option<Arc<str>> {
+    pub fn get_static_content(&self) -> Option<&str> {
         match self {
-            Self::Warning(index_template) => Some(index_template.static_content.clone()),
+            Self::Warning(index_template) => Some(index_template.static_content.as_ref()),
             Self::Generated(_) => None,
         }
     }
@@ -85,7 +85,7 @@ pub struct WarningTemplate {
 
 impl WarningTemplate {
     pub fn init(template: Arc<str>, static_content: Arc<str>) -> Result<Self, TemplateError> {
-        let cursor = TemplateCursor::new(template);
+        let cursor = TemplateCursor::new(&template);
 
         if cursor.validate(&[
             TemplateState::Title,
@@ -93,7 +93,7 @@ impl WarningTemplate {
             TemplateState::Footer,
         ]) {
             Ok(Self {
-                template: cursor.finish(),
+                template,
                 static_content,
             })
         } else {
@@ -109,7 +109,7 @@ pub struct GeneratedTemplate {
 
 impl GeneratedTemplate {
     pub fn init(template: Arc<str>) -> Result<Self, TemplateError> {
-        let cursor = TemplateCursor::new(template);
+        let cursor = TemplateCursor::new(&template);
 
         if cursor.validate(&[
             TemplateState::Title,
@@ -118,9 +118,7 @@ impl GeneratedTemplate {
             TemplateState::Extra,
             TemplateState::Footer,
         ]) {
-            Ok(Self {
-                template: cursor.finish(),
-            })
+            Ok(Self { template })
         } else {
             Err(TemplateError)
         }
@@ -140,24 +138,18 @@ impl core::error::Error for TemplateError {}
 
 pub struct TemplateCursor {
     cursor: *const str,
-    _template: Arc<str>,
 }
 
 impl TemplateCursor {
-    pub fn new(template: Arc<str>) -> Self {
+    pub fn new(template: &Arc<str>) -> Self {
         Self {
-            cursor: Arc::as_ptr(&template),
-            _template: template,
+            cursor: Arc::as_ptr(template),
         }
-    }
-
-    fn finish(self) -> Arc<str> {
-        self._template
     }
 
     fn cast_cursor(&self) -> &str {
         // SAFETY: The pointer will always be valid as we own an Arc instance
-        // within the cursor struct, meaning as long as the cursor lives, the
+        // within the future, meaning as long as the future lives, the
         // Arc will never be dropped and cleaned.
         unsafe { &*self.cursor }
     }
@@ -259,7 +251,7 @@ mod tests {
     fn writes_template_to_buffer() {
         let template: Arc<str> = Arc::from("<h1>{{ TITLE }}</h1><p>{{ MAIN }}</p>");
 
-        let mut cursor = TemplateCursor::new(template);
+        let mut cursor = TemplateCursor::new(&template);
 
         let mut buffer = BytesMut::new();
 
@@ -282,7 +274,7 @@ mod tests {
     fn writes_static_template_to_buffer() {
         let template: Arc<str> = Arc::from("<h1>Static</h1><p>Template</p>");
 
-        let mut cursor = TemplateCursor::new(template);
+        let mut cursor = TemplateCursor::new(&template);
 
         let mut buffer = BytesMut::new();
 
@@ -296,7 +288,7 @@ mod tests {
     fn wont_write_empty_template_to_buffer() {
         let template: Arc<str> = Arc::from("");
 
-        let mut cursor = TemplateCursor::new(template);
+        let mut cursor = TemplateCursor::new(&template);
 
         let mut buffer = BytesMut::new();
 

@@ -7,7 +7,6 @@ pub mod interner;
 mod token;
 
 use error::NailError;
-use hashbrown::HashMap;
 use indexmap::IndexMap;
 use interner::Interner;
 use itertools::Itertools;
@@ -51,12 +50,12 @@ impl core::hash::BuildHasher for RandomState {
 
 #[derive(Clone, Debug)]
 pub struct NailKov {
-    chain: HashMap<TokenPair, TokenWeights, RandomState>,
+    chain: IndexMap<TokenPair, TokenWeights, RandomState>,
 }
 
 pub struct NailKovIter<'a, R: RngCore> {
     rng: &'a mut R,
-    chain: &'a NailKov,
+    markov: &'a NailKov,
     prev: TokenPair,
 }
 
@@ -65,7 +64,9 @@ impl<R: RngCore> Iterator for NailKovIter<'_, R> {
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        let next_token = self.chain.generate_next_token(&mut self.rng, self.prev)?;
+        let dist = self.markov.chain.get(&self.prev)?;
+
+        let next_token = dist.sample(&mut self.rng);
 
         self.prev = TokenPair::new(self.prev.right, next_token);
 
@@ -75,28 +76,14 @@ impl<R: RngCore> Iterator for NailKovIter<'_, R> {
 
 impl NailKov {
     #[inline]
-    fn generate_next_token(&self, rng: &mut impl RngCore, prev: TokenPair) -> Option<Token> {
-        match self.chain.get(&prev) {
-            Some(dist) => Some(dist.sample(rng)),
-            None => None,
-        }
-    }
-
-    #[inline]
-    pub fn generate_tokens<'a, R: RngCore>(
-        &'a self,
-        rng: &'a mut R,
-    ) -> NailKovIter<'a, R> {
+    pub fn generate_tokens<'a, R: RngCore>(&'a self, rng: &'a mut R) -> NailKovIter<'a, R> {
         NailKovIter {
-            prev: self.starting_token_pair(rng),
-            chain: self,
+            // A markov chain that was successfully built is never empty, so
+            // it will always return with a value, making unwrapping it safe to do.
+            prev: self.chain.keys().choose(rng).copied().unwrap(),
+            markov: self,
             rng,
         }
-    }
-
-    #[inline]
-    fn starting_token_pair(&self, rng: &mut impl RngCore) -> TokenPair {
-        self.chain.keys().choose(rng).copied().unwrap()
     }
 }
 
@@ -126,7 +113,7 @@ impl NailBuilder {
             return Err(NailError::EmptyInput);
         }
 
-        let chain: HashMap<TokenPair, TokenWeights, RandomState> = self
+        let chain: IndexMap<TokenPair, TokenWeights, RandomState> = self
             .chain
             .into_iter()
             .flat_map(|(pair, dist)| {
@@ -161,11 +148,11 @@ impl NailBuilder {
         self.feed_tokens(
             content
                 .split_word_bounds()
-                .map(|text| interner.intern(text).into()),
+                .map(|text| interner.intern(text)),
         )
     }
 
-    fn feed_tokens<T: Iterator<Item = Token>>(mut self, tokens: T) -> Result<Self, NailError> {
+    fn feed_tokens(mut self, tokens: impl Iterator<Item = Token>) -> Result<Self, NailError> {
         let windows = tokens.tuple_windows();
 
         if windows.size_hint().1.is_none() {

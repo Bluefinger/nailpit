@@ -14,7 +14,7 @@ workspace = true
 nailkov = { path = "../nailkov" }
 nailconfig = { path = "../nailconfig" }
 nailrng = { path = "../nailrng" }
-parking_lot.workspace = true
+nailbox = { path = "../nailbox" }
 color-eyre.workspace = true
 fastrace.workspace = true
 fastrace-futures.workspace = true

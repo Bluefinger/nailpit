@@ -1,30 +1,97 @@
 [server]
-pit_routes = ["/private"]
+# Define route entry points for the tarpit. By default, it is the root, but can
+# include more directories, or the root be excluded for other paths.
+pit_routes = ["/"]
+
+# The socket address the nailpit listens on
 socket_addr = "0.0.0.0:3000"
+
+# The amount of worker threads dedicated to the tarpit. Generating larger payloads
+# will benefit from more threads to balance the generation load better.
 worker_threads = 1
 
 [generator]
+# Input text files to feed the Markov Chain. Uses glob format. Multiple files that are
+# included will be turned into multiple different chains, so generated pages have randomised
+# garbage content to appear different during navigation. The more text provided the better.
 input_files = "input/*.txt"
+
+# The template file for the warning/entry page. A valid warning template will only use {{ title }},
+# {{ main }} and {{ footer }} placeholders.
 warning_template = "templates/warning.html"
+# The content to be rendered in the warning page. Expects plain text, and the first line is rendered as
+# the title. All other text that is separated by line-breaks are rendered as paragraphs.
 warning_message = "templates/message.txt"
+
+# The template file for generated pages. A valid generation template can use all available placeholder types.
 generated_template = "templates/generated.html"
+
+# Minimum amount of words per generated paragraph.
 min_paragraph_size = 128
+# Maximum amount of words per generated paragraph.
 max_paragraph_size = 256
+
+# Maximum amount of links to be rendered in the footer to allow crawlers go deeper into the tarpit.
+# Acts as a form of staggering concurrency, so crawlers don't immediately open hundreds of connections.
 max_pit_links = 4
+
+# Maximum amount of characters in generated headers.
 header_size = 32
-payload_size = 100
-timeout = 60
+
+# Amount of generated content in Kilobytes to be generated before the page completes. The smaller the payload,
+# the faster the generation, but the bigger the payload, the more resource pressure it applies to web crawlers.
+# Pages are compressed as they are streamed to the client however, so over the wire, this will be smaller.
+payload_size = 48
+
+# Maximum amount of time for a connection to stay alive before being dropped.
+timeout = 30
+# Minimum amount of delay per generation loop. Used to configure tarpit for slow loris type attacks.
 min_delay = 0
+# Maximum amount of delay per generation loop. Used to configure tarpit for slow loris type attacks.
+# Greater variance between min and max delays creates less predictable delay patterns to disguise the
+# attack
 max_delay = 100
+
+# Size of chunk in bytes to be rendered before being streamed to the client. This is for adjusting
+# throughput/latency characteristics of page generation and memory usage characteristics.
 chunk_size = 4096
 
+# Adds additional text to a page post generation loop (but before the footer links), useful for
+# adding prompts or static content. More than one bit of static content added here is randomly chosen
+# for rendering on a given generated page.
+prompts = []
+
 [rate_limiting]
+# The kind of rate limiting you want enabled. Options are `no_limit`, `soft_limit` (which introduces a delay
+# to when the content generation starts if hit by too many), `hard_limit` (which drops the connection if too many
+# requests are made), `soft_with_hard_limit` (which combines the two soft and hard modes, delaying at first to then
+# dropping the request after still too many requests).
 type = "soft_limit"
+# The amount of requests needed to hit the soft limiting state. This resets if it hasn't received a request from
+# a client in more than two minutes.
 soft_limit = 200
+# The delay applied to soft limited clients. The delay is in milliseconds.
 soft_delay = 600
+# The amount of requests need to hit the hard limiting state. This setting only takes effect if `hard_limit` is set
+# on the `type` option. If the type option is set to `soft_with_hard_limit`, it is recommended to ensure this value
+# is always greater than the `soft_limit` amount.
+hard_limit = 300
+# If `hard_limit` or `soft_with_hard_limit` is set, then the connection dropping mechanics are set via
+# `drop_behavior`. By default, it is set to `normal` mode, which just terminates with connection with a RATE_LIMITED
+# HTTP status code. If you set to `spicy`, then you have an additional option: `payload`. `payload` accepts a list of
+# strings, which are paths to static compressed files you can send back to the client. It will only accept gzip and
+# brotli compressed files. I don't have to explain why you want statically compressed 'spicy' files to be sent over the wire ;)
+drop_behavior = { mode = "normal" }
+# drop_behavior = { mode = "spicy", payload = ["spicy.gz", "spicy.br"] }
 
 [open_telemetry]
+# The OTEL collector address & port for sending OTEL logs + traces to.
 endpoint = "http://127.0.0.1:4317"
+# The service name that will be used for OTEL logs and trace spans.
 service_name = "nailpit"
+# Enable logging to OTEL collector
 logs = false
+# Enable collecting trace data to OTEL collector. This option imposes a significant overhead, so only
+# enable it if you have the capacity for storing the data, which can be a lot during heavy traffic.
+# This option is only available to binaries compiled with tracing support.
 traces = false

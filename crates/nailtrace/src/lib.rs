@@ -76,8 +76,7 @@ pub async fn tracing_root_span(
             .chain(Some((
                 SERVER_PORT,
                 host.next()
-                    .map(ToString::to_string)
-                    .unwrap_or_else(|| connection.port().to_string()),
+                    .map_or_else(|| connection.port().to_string(), ToString::to_string),
             )))
     });
 
@@ -121,17 +120,23 @@ where
                     headers
                         .get(CONTENT_ENCODING)
                         .and_then(header_value_to_str)
-                        .map(ToString::to_string)
                         .map(|content_encoding| {
-                            ("http.response.header.content_encoding", content_encoding)
+                            (
+                                "http.response.header.content_encoding",
+                                content_encoding.to_string(),
+                            )
                         }),
                 )
                 .chain(
                     headers
                         .get(CONTENT_TYPE)
                         .and_then(header_value_to_str)
-                        .map(ToString::to_string)
-                        .map(|content_type| ("http.response.header.content_type", content_type)),
+                        .map(|content_type| {
+                            (
+                                "http.response.header.content_type",
+                                content_type.to_string(),
+                            )
+                        }),
                 )
             });
         }

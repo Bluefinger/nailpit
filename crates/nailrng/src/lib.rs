@@ -12,6 +12,13 @@ thread_local! {
 
 pub struct FastRng(WyRand);
 
+impl FastRng {
+    #[inline]
+    pub fn fork(&mut self) -> Self {
+        Self(WyRand::new(self.next_u64()))
+    }
+}
+
 impl Default for FastRng {
     fn default() -> Self {
         SOURCE.with(|source| {

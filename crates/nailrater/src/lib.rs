@@ -3,7 +3,7 @@ mod modes;
 
 use std::{
     net::IpAddr,
-    sync::Arc,
+    sync::{Arc, OnceLock},
     time::{Duration, Instant},
 };
 
@@ -13,18 +13,22 @@ use fastrace::{
     future::{FutureExt as SpanFutureExt, InSpan},
 };
 use futures::NailedResponseFuture;
-use futures_lite::{FutureExt, future::Boxed};
+use futures_lite::future::Boxed;
 
 use hyper::HeaderMap;
 use modes::LimitModes;
+use nailbox::boxed_future_within;
 use nailconfig::RateLimitingConfig;
 use nailip::IdentifiedPeer;
 use nailspicy::{SpicyPayloadKind, SpicyPayloads};
+use parking_lot::RwLock;
 use rapidhash::fast::RandomState;
 use scc::HashMap;
 use tokio::time::sleep;
 
 const SOURCE_TIMEOUT: Duration = Duration::from_secs(60 * 2);
+
+static PRUNING_SCHEDULE: RwLock<OnceLock<Instant>> = RwLock::new(OnceLock::new());
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 enum PeerState {
@@ -70,7 +74,6 @@ impl<S> tower::Layer<S> for NailRaterLayer {
 pub struct NailRater<S> {
     peers: Arc<HashMap<IpAddr, Peer, RandomState>>,
     mode: LimitModes,
-    schedule_pruning: Option<Instant>,
     spicy_payload: Option<Arc<SpicyPayloads>>,
     inner: S,
 }
@@ -84,7 +87,6 @@ impl<S> NailRater<S> {
         Self {
             peers: Default::default(),
             mode: mode.into(),
-            schedule_pruning: None,
             spicy_payload,
             inner,
         }
@@ -114,22 +116,31 @@ impl<S> NailRater<S> {
     }
 
     fn prune(peers: Arc<HashMap<IpAddr, Peer, RandomState>>) -> Boxed<()> {
-        async move {
+        boxed_future_within(async move || {
+            log::trace!("PRUNING STARTED");
+
             peers
                 .retain_async(|_, v| v.last_seen.elapsed() < crate::SOURCE_TIMEOUT)
                 .await
-        }
-        .boxed()
+        })
     }
 
     fn prune_recorded_peers(&mut self) -> Option<Boxed<()>> {
-        if self.schedule_pruning.is_none() {
-            self.schedule_pruning.replace(Instant::now());
-        }
+        let mut lock = PRUNING_SCHEDULE.upgradable_read();
+        let since = lock.get_or_init(Instant::now);
 
-        self.schedule_pruning
-            .take_if(|since| since.elapsed() >= crate::SOURCE_TIMEOUT)
-            .map(|_| Self::prune(self.peers.clone()))
+        let elapsed = since.elapsed();
+
+        log::trace!("ELAPSED: {}ms", elapsed.as_millis());
+
+        if elapsed >= crate::SOURCE_TIMEOUT {
+            lock.with_upgraded(OnceLock::take);
+            drop(lock);
+
+            Some(Self::prune(self.peers.clone()))
+        } else {
+            None
+        }
     }
 }
 
@@ -164,14 +175,14 @@ where
             PeerState::SpicyDrop => {
                 return self
                     .spicy_payload
-                    .as_ref()
+                    .as_deref()
                     .zip(supports_spicy)
                     .and_then(|(payloads, kind)| {
-                        payloads
-                            .peek_with(&kind, |_, payload| payload.clone())
-                            .map(|payload| NailedResponseFuture::spicy(payload, kind))
+                        payloads.get(&kind).map(|payload| (payload.clone(), kind))
                     })
-                    .unwrap_or_else(NailedResponseFuture::dropped)
+                    .map_or_else(NailedResponseFuture::dropped, |(payload, kind)| {
+                        NailedResponseFuture::spicy(payload, kind)
+                    })
                     .in_span(parent);
             }
             _ => return NailedResponseFuture::dropped().in_span(parent),

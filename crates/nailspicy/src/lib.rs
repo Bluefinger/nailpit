@@ -1,9 +1,12 @@
+use std::sync::Arc;
+
+use hashbrown::HashMap;
 use hyper::{HeaderMap, body::Bytes, header::ACCEPT_ENCODING};
+use nailbox::try_arc_within;
 use nailconfig::{DropBehavior, NailConfig, RateLimitingConfig};
 use rapidhash::fast::RandomState;
-use scc::HashIndex;
 
-pub type SpicyPayloads = HashIndex<SpicyPayloadKind, Bytes, RandomState>;
+pub type SpicyPayloads = HashMap<SpicyPayloadKind, Bytes, RandomState>;
 
 static GZIP: &str = "gzip";
 static BROTLI: &str = "br";
@@ -50,7 +53,7 @@ impl SpicyPayloadKind {
     }
 }
 
-pub fn get_spicy_payload(config: &NailConfig) -> Option<SpicyPayloads> {
+pub fn get_spicy_payload(config: &NailConfig) -> Option<Arc<SpicyPayloads>> {
     match &config.rate_limiting {
         RateLimitingConfig::HardLimit {
             drop_behavior: DropBehavior::Spicy { payload },
@@ -59,19 +62,21 @@ pub fn get_spicy_payload(config: &NailConfig) -> Option<SpicyPayloads> {
         | RateLimitingConfig::SoftWithHardLimit {
             drop_behavior: DropBehavior::Spicy { payload },
             ..
-        } => payload
-            .iter()
-            .filter_map(|file| SpicyPayloadKind::file_kind(file).map(|kind| (kind, file)))
-            .map(|(kind, file)| {
-                Some((
-                    kind,
-                    std::fs::read(file)
-                        .inspect_err(|err| log::error!("Failed to load spicy payload: {err}"))
-                        .map(Bytes::from)
-                        .ok()?,
-                ))
-            })
-            .collect(),
+        } => try_arc_within(|| {
+            payload
+                .iter()
+                .filter_map(|file| SpicyPayloadKind::file_kind(file).map(|kind| (kind, file)))
+                .map(|(kind, file)| {
+                    Ok((
+                        kind,
+                        std::fs::read(file)
+                            .inspect_err(|err| log::error!("Failed to load spicy payload: {err}"))
+                            .map(Bytes::from)?,
+                    ))
+                })
+                .collect::<std::io::Result<_>>()
+        })
+        .ok(),
         _ => None,
     }
 }

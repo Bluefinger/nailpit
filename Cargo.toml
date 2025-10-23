@@ -45,11 +45,10 @@ logforth = { version = "0.28", features = [
 logforth-bridge-log = "0.2"
 unicode-segmentation = "1.12.0"
 itertools = "0.14.0"
-parking_lot = "0.12.3"
 indexmap = "2.9.0"
+parking_lot = "0.12"
 tokio = { version = "1.44.2", features = [
     "rt",
-    "rt-multi-thread",
     "sync",
     "time",
     "parking_lot",
@@ -113,6 +112,7 @@ nailotel = { path = "crates/nailotel" }
 nailroutes = { path = "crates/nailroutes" }
 nailspicy = { path = "crates/nailspicy" }
 nailnet = { path = "crates/nailnet" }
+nailbox = { path = "crates/nailbox" }
 axum.workspace = true
 tokio.workspace = true
 color-eyre.workspace = true

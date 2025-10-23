@@ -9,6 +9,7 @@ use rand::{Rng, RngCore, distr::Alphanumeric, seq::IndexedRandom};
 
 /// Provides either the minimum configured size, or a randomised value between
 /// the minimum and maximum configured sizes if a maximum is available.
+#[inline]
 pub fn get_desired_size(config: &NailConfig, rng: &mut impl RngCore) -> usize {
     match (
         config.generator.min_paragraph_size,
@@ -21,6 +22,7 @@ pub fn get_desired_size(config: &NailConfig, rng: &mut impl RngCore) -> usize {
 
 /// Generates text from the markov chain, using the tokens it outputs to pull
 /// interned text from the interner.
+#[inline]
 pub fn text_generator<'a>(
     interner: &'a Interner,
     chain: &'a NailKov,
@@ -30,10 +32,12 @@ pub fn text_generator<'a>(
     chain
         .generate_tokens(rng)
         .take(size)
-        .flat_map(|token| interner.lookup_bytes(token))
+        // SAFETY: The id comes from the same interner that allocated it
+        .flat_map(|token| unsafe { interner.lookup(token).as_bytes() })
         .skip_while(|&text| !text.is_ascii_alphabetic())
 }
 
+#[inline]
 pub fn static_title<'a>(text: &'a str) -> impl Iterator<Item = &'a u8> + 'a {
     text.lines()
         .map(|line| line.trim())
@@ -42,6 +46,7 @@ pub fn static_title<'a>(text: &'a str) -> impl Iterator<Item = &'a u8> + 'a {
         .flat_map(|title| title.as_bytes())
 }
 
+#[inline]
 pub fn static_content<'a>(text: &'a str) -> impl Iterator<Item = &'a u8> + 'a {
     text.lines()
         .skip(1)
@@ -59,42 +64,40 @@ pub fn static_content<'a>(text: &'a str) -> impl Iterator<Item = &'a u8> + 'a {
 
 #[fastrace::trace(enter_on_poll = true)]
 pub async fn initial_content(
-    mut buf_mut: BytesMut,
+    buf_mut: BytesMut,
     interner: Arc<Interner>,
     chain: Arc<NailKov>,
     config: Arc<NailConfig>,
+    mut rng: FastRng,
 ) -> Bytes {
-    let mut rng = FastRng::default();
-
     // Randomise how many initial paragraphs we want
     let max_paras: u32 = rng.random_range(1..=3);
 
-    for _ in 0..max_paras {
-        buf_mut.extend(paragraph(
-            &interner,
-            &chain,
-            get_desired_size(&config, &mut rng),
-            &mut rng,
-        ));
-    }
+    (0..max_paras)
+        .fold(buf_mut, |mut acc, _| {
+            acc.extend(paragraph(
+                &interner,
+                &chain,
+                get_desired_size(&config, &mut rng),
+                &mut rng,
+            ));
 
-    buf_mut.freeze()
+            acc
+        })
+        .freeze()
 }
 
 #[fastrace::trace(enter_on_poll = true)]
 pub async fn main_content(
+    mut buffer: BytesMut,
     interner: Arc<Interner>,
     chain: Arc<NailKov>,
     config: Arc<NailConfig>,
+    mut rng: FastRng,
 ) -> Bytes {
-    // Allocate more than we need, as we might generate more tokens than our 4kB threshold
-    let mut buffer = BytesMut::with_capacity(config.generator.chunk_size * 2);
-    let mut rng = FastRng::default();
+    buffer.reserve(config.generator.chunk_size * 2);
 
     loop {
-        // Randomise how many paragraphs we want per section
-        let max_paras: u32 = rng.random_range(1..=4);
-
         buffer.extend(header(
             &interner,
             &chain,
@@ -102,14 +105,17 @@ pub async fn main_content(
             &mut rng,
         ));
 
-        for _ in 0..max_paras {
+        // Randomise how many paragraphs we want per section
+        let paragraphs = rng.random_range(1..=4);
+
+        (0..paragraphs).for_each(|_| {
             buffer.extend(paragraph(
                 &interner,
                 &chain,
                 get_desired_size(&config, &mut rng),
                 &mut rng,
             ));
-        }
+        });
 
         // We can generate more before handing it off to be streamed to the client,
         // A bit more latency, but much more throughput, and friendlier to being compressed.
@@ -124,19 +130,16 @@ pub async fn main_content(
 }
 
 #[fastrace::trace]
-pub fn extra(buf_mut: &mut BytesMut, config: &NailConfig) -> usize {
-    let mut rng = FastRng::default();
-
+#[inline]
+pub fn extra(buf_mut: &mut BytesMut, config: &NailConfig, rng: &mut FastRng) -> usize {
     let mut written = 0;
 
     if let Some(prompt) = match config.generator.prompts.len() {
         0 => None,
         1 => config.generator.prompts.first(),
-        _ => config.generator.prompts.choose(&mut rng),
+        _ => config.generator.prompts.choose(rng),
     } {
-        buf_mut.extend_from_slice(b"<p>");
-        buf_mut.extend_from_slice(prompt.as_bytes());
-        buf_mut.extend_from_slice(b"</p>");
+        buf_mut.extend(b"<p>".iter().chain(prompt.as_bytes()).chain(b"</p>"));
 
         written += prompt.len();
     }
@@ -151,26 +154,34 @@ pub async fn footer(
     chain: Arc<NailKov>,
     path: MatchedPath,
     config: Arc<NailConfig>,
+    mut rng: FastRng,
 ) -> Bytes {
-    let mut rng = FastRng::default();
-
     let route = path
         .as_str()
         .strip_suffix("/{*generated}")
         .unwrap_or_else(|| path.as_str());
 
-    links(
-        &interner,
-        &chain,
-        route,
-        config.generator.max_pit_links,
-        &mut rng,
-        &mut buf_mut,
-    );
+    let total_links = rng.random_range(1..=config.generator.max_pit_links);
+
+    buf_mut.extend_from_slice(b"<nav style=\"visibility: hidden;\"><ul>");
+
+    for _ in 1..=total_links {
+        buf_mut.extend(b"<li><a href=\"".iter().chain(route.as_bytes()).chain(b"/"));
+        buf_mut.extend((&mut rng).sample_iter(Alphanumeric).take(16));
+        buf_mut.extend(
+            b"\">"
+                .iter()
+                .chain(text_generator(&interner, &chain, 8, &mut rng))
+                .chain(b"</a></li>\n"),
+        );
+    }
+
+    buf_mut.extend_from_slice(b"</ul></nav>");
 
     buf_mut.freeze()
 }
 
+#[inline]
 fn paragraph<'a>(
     interner: &'a Interner,
     chain: &'a NailKov,
@@ -183,6 +194,7 @@ fn paragraph<'a>(
         .chain(b"</p>\n")
 }
 
+#[inline]
 fn header<'a>(
     interner: &'a Interner,
     chain: &'a NailKov,
@@ -193,29 +205,4 @@ fn header<'a>(
         .iter()
         .chain(text_generator(interner, chain, size, rng))
         .chain(b"</h2>\n")
-}
-
-fn links<'a>(
-    interner: &'a Interner,
-    chain: &'a NailKov,
-    route: &str,
-    max_links: usize,
-    rng: &'a mut impl RngCore,
-    buf_mut: &'a mut BytesMut,
-) {
-    let total_links = rng.random_range(1..=max_links);
-
-    buf_mut.extend_from_slice(b"<nav style=\"visibility: hidden;\"><ul>");
-
-    for _ in 1..=total_links {
-        buf_mut.extend_from_slice(b"<li><a href=\"");
-        buf_mut.extend_from_slice(route.as_bytes());
-        buf_mut.extend_from_slice(b"/");
-        buf_mut.extend(rng.sample_iter(Alphanumeric).take(16));
-        buf_mut.extend_from_slice(b"\">");
-        buf_mut.extend(text_generator(interner, chain, 8, rng));
-        buf_mut.extend_from_slice(b"</a></li>");
-    }
-
-    buf_mut.extend_from_slice(b"</ul></nav>");
 }

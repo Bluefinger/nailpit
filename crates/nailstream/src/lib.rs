@@ -27,6 +27,7 @@ impl<S> NailResponseStream<S>
 where
     S: Stream<Item = Bytes> + Unpin + Send + 'static,
 {
+    #[inline]
     pub fn from_stream(stream: S) -> Self {
         Self { stream }
     }
@@ -45,10 +46,8 @@ where
         cx: &mut Context<'_>,
     ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
         match core::pin::pin!(&mut self.stream).poll_next(cx) {
-            Poll::Ready(payload) => match payload {
-                Some(bytes) => Poll::Ready(Some(Ok(Frame::data(bytes)))),
-                None => Poll::Ready(None),
-            },
+            Poll::Ready(Some(bytes)) => Poll::Ready(Some(Ok(Frame::data(bytes)))),
+            Poll::Ready(None) => Poll::Ready(None),
             Poll::Pending => Poll::Pending,
         }
     }
@@ -58,6 +57,7 @@ impl<S> IntoResponse for NailResponseStream<S>
 where
     S: Stream<Item = Bytes> + Unpin + Send + 'static,
 {
+    #[inline]
     fn into_response(self) -> Response<Body> {
         let mut response: Response<Body> = Response::new(Body::new(self));
         response

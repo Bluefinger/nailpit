@@ -1,5 +1,5 @@
 [package]
-name = "nailspicy"
+name = "nailbox"
 authors.workspace = true
 edition.workspace = true
 repository.workspace = true
@@ -8,12 +8,6 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-nailconfig = { path = "../nailconfig" }
-nailbox = { path = "../nailbox" }
-hyper.workspace = true
-rapidhash.workspace = true
-hashbrown.workspace = true
-log.workspace = true
 
 [lints]
 workspace = true

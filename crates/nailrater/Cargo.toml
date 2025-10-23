@@ -12,10 +12,13 @@ nailfv = { path = "../nailfv" }
 nailconfig = { path = "../nailconfig" }
 nailspicy = { path = "../nailspicy" }
 nailip = { path = "../nailip" }
+nailbox = { path = "../nailbox" }
 axum.workspace = true
 futures-lite.workspace = true
 hyper.workspace = true
 pin-project-lite.workspace = true
+parking_lot.workspace = true
+log.workspace = true
 scc.workspace = true
 tokio.workspace = true
 rapidhash.workspace = true

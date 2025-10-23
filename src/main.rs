@@ -32,13 +32,13 @@ fn main() -> Result<()> {
     color_eyre::install()?;
     logforth_bridge_log::try_setup()?;
 
-    let config = nailconfig::get_configuration().map(Arc::new)?;
+    let config = nailconfig::get_configuration()?;
 
     let (inputs, interner) = nailpit::inputs::get_input_files(config.as_ref())?;
 
     let templates = nailpit::inputs::get_template_files(config.as_ref())?;
 
-    let spicy = nailspicy::get_spicy_payload(config.as_ref()).map(Arc::new);
+    let spicy = nailspicy::get_spicy_payload(config.as_ref());
 
     nailpit::runtime::start(
         App::new(config, inputs, interner, spicy, templates),

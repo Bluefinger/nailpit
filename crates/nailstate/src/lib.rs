@@ -30,18 +30,18 @@ impl NailInputs {
 
     /// Pulls a random markov chain from the available list. Returns a cloned
     /// pointer to the selected chain.
-    pub fn get_random_input(&self) -> MarkovGen {
+    #[inline]
+    pub fn get_random_input(&self, rng: &mut FastRng) -> MarkovGen {
         assert!(!self.chains.is_empty());
 
         if self.chains.len() == 1 {
             self.chains[0].clone()
         } else {
-            let mut rng = FastRng::default();
-
-            self.chains.choose(&mut rng).unwrap().clone()
+            self.chains.choose(rng).unwrap().clone()
         }
     }
 
+    #[inline]
     pub fn get_interner(&self) -> Arc<Interner> {
         self.interner.clone()
     }
@@ -56,7 +56,7 @@ impl NailInputs {
                     None
                 }
             })
-            .expect("There must be a Generated template")
+            .expect("There must be a Warning template")
     }
 
     pub fn get_generated_template(&self) -> GeneratedTemplate {
