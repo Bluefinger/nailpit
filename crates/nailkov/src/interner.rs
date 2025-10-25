@@ -4,6 +4,7 @@ use rapidhash::fast::RandomState;
 use crate::token::Token;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(transparent)]
 struct StringPtr(*const str);
 
 impl StringPtr {
