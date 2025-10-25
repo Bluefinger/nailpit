@@ -164,7 +164,6 @@ where
 {
     type Rejection = Infallible;
 
-    #[fastrace::trace]
     async fn from_request_parts(
         _parts: &mut axum::http::request::Parts,
         state: &S,
@@ -180,7 +179,6 @@ where
 {
     type Rejection = Infallible;
 
-    #[fastrace::trace]
     async fn from_request_parts(
         _parts: &mut axum::http::request::Parts,
         state: &S,
@@ -196,7 +194,6 @@ where
 {
     type Rejection = Infallible;
 
-    #[fastrace::trace]
     async fn from_request_parts(
         _parts: &mut axum::http::request::Parts,
         state: &ServerState,
@@ -212,7 +209,6 @@ where
 {
     type Rejection = Infallible;
 
-    #[fastrace::trace]
     async fn from_request_parts(
         _parts: &mut axum::http::request::Parts,
         state: &ServerState,

@@ -10,7 +10,7 @@ use rand::{Rng, RngCore, distr::Alphanumeric, seq::IndexedRandom};
 /// Provides either the minimum configured size, or a randomised value between
 /// the minimum and maximum configured sizes if a maximum is available.
 #[inline]
-pub fn get_desired_size(config: &NailConfig, rng: &mut impl RngCore) -> usize {
+fn get_desired_size(config: &NailConfig, rng: &mut impl RngCore) -> usize {
     match (
         config.generator.min_paragraph_size,
         config.generator.max_paragraph_size,
@@ -40,10 +40,10 @@ pub fn text_generator<'a>(
 #[inline]
 pub fn static_title<'a>(text: &'a str) -> impl Iterator<Item = &'a u8> + 'a {
     text.lines()
-        .map(|line| line.trim())
+        .map(str::trim)
         .next()
         .into_iter()
-        .flat_map(|title| title.as_bytes())
+        .flat_map(str::as_bytes)
 }
 
 #[inline]
@@ -62,7 +62,7 @@ pub fn static_content<'a>(text: &'a str) -> impl Iterator<Item = &'a u8> + 'a {
         .flat_map(|bytes| b"<p>".iter().chain(bytes).chain(b"</p>\n"))
 }
 
-#[fastrace::trace(enter_on_poll = true)]
+#[cfg_attr(feature = "tracing", fastrace::trace(enter_on_poll = true))]
 pub async fn initial_content(
     buf_mut: BytesMut,
     interner: Arc<Interner>,
@@ -87,7 +87,7 @@ pub async fn initial_content(
         .freeze()
 }
 
-#[fastrace::trace(enter_on_poll = true)]
+#[cfg_attr(feature = "tracing", fastrace::trace(enter_on_poll = true))]
 pub async fn main_content(
     mut buffer: BytesMut,
     interner: Arc<Interner>,
@@ -129,7 +129,7 @@ pub async fn main_content(
     }
 }
 
-#[fastrace::trace]
+#[cfg_attr(feature = "tracing", fastrace::trace)]
 #[inline]
 pub fn extra(buf_mut: &mut BytesMut, config: &NailConfig, rng: &mut FastRng) -> usize {
     let mut written = 0;
@@ -147,7 +147,7 @@ pub fn extra(buf_mut: &mut BytesMut, config: &NailConfig, rng: &mut FastRng) -> 
     written
 }
 
-#[fastrace::trace]
+#[cfg_attr(feature = "tracing", fastrace::trace)]
 pub async fn footer(
     mut buf_mut: BytesMut,
     interner: Arc<Interner>,
@@ -156,10 +156,9 @@ pub async fn footer(
     config: Arc<NailConfig>,
     mut rng: FastRng,
 ) -> Bytes {
-    let route = path
-        .as_str()
-        .strip_suffix("/{*generated}")
-        .unwrap_or_else(|| path.as_str());
+    let path = path.as_str();
+
+    let route = path.strip_suffix("/{*generated}").unwrap_or(path);
 
     let total_links = rng.random_range(1..=config.generator.max_pit_links);
 

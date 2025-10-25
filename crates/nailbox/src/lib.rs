@@ -57,7 +57,7 @@ mod tests {
 
     #[test]
     fn boxed_futures() {
-        let boxed = boxed_future_within(async || { 42 });
+        let boxed = boxed_future_within(async || 42);
 
         assert_eq!(size_of_val(&boxed), 8);
     }

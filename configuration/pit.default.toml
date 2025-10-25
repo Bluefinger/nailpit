@@ -41,20 +41,25 @@ header_size = 32
 # Amount of generated content in Kilobytes to be generated before the page completes. The smaller the payload,
 # the faster the generation, but the bigger the payload, the more resource pressure it applies to web crawlers.
 # Pages are compressed as they are streamed to the client however, so over the wire, this will be smaller.
-payload_size = 48
+payload_size = 32
 
-# Maximum amount of time for a connection to stay alive before being dropped.
+# Maximum amount of time for a connection to stay alive before being dropped. If configuring for a slow loris
+# attack, you might want to increase this value depending on how much you are delaying your page generation and
+# how big the pages are.
 timeout = 30
 # Minimum amount of delay per generation loop. Used to configure tarpit for slow loris type attacks.
 min_delay = 0
 # Maximum amount of delay per generation loop. Used to configure tarpit for slow loris type attacks.
 # Greater variance between min and max delays creates less predictable delay patterns to disguise the
 # attack
-max_delay = 100
+max_delay = 0
 
-# Size of chunk in bytes to be rendered before being streamed to the client. This is for adjusting
-# throughput/latency characteristics of page generation and memory usage characteristics.
-chunk_size = 4096
+# Size of chunk in bytes to be generated before being streamed to the client. This is for adjusting
+# throughput/latency characteristics of page generation and memory usage characteristics. This setting
+# should be adjusted according to hardware characteristics, but the value below is a fair default if you
+# want to have high throughput. Slow loris attack setups might want to tweak this value to be lower in
+# order to drip feed smaller portions of content to the client.
+chunk_size = 8192
 
 # Adds additional text to a page post generation loop (but before the footer links), useful for
 # adding prompts or static content. More than one bit of static content added here is randomly chosen

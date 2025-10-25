@@ -13,7 +13,6 @@ nailconfig = { path = "../nailconfig" }
 nailgen = { path = "../nailgen" }
 nailkov = { path = "../nailkov" }
 axum.workspace = true
-fastrace.workspace = true
 rand.workspace = true
 
 [lints]

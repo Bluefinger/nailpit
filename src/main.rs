@@ -5,8 +5,7 @@ use std::sync::Arc;
 use color_eyre::Result;
 use nailpit::app::App;
 
-#[cfg(feature = "mimalloc")]
-#[global_allocator]
+#[cfg_attr(feature = "mimalloc", global_allocator)]
 static GLOBAL: mimalloc_safe::MiMalloc = mimalloc_safe::MiMalloc;
 
 async fn spawn_axum_worker(
