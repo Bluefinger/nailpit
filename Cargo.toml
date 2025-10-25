@@ -58,7 +58,7 @@ tokio = { version = "1.44.2", features = [
 tokio-stream = { version = "0.1.17" }
 futures-lite = "2.6.0"
 pin-project-lite = "0.2.16"
-scc = "2.3.3"
+scc = "3.3.2"
 tower = { version = "0.5.2" }
 tower-http = { version = "0.6.2", features = [
     "compression-br",
@@ -96,6 +96,7 @@ name = "nailpit"
 [features]
 default = ["mimalloc"]
 tracing = ["nailotel/tracing"]
+debug_tracing = ["nailgen/tracing"]
 mimalloc = ["dep:mimalloc-safe"]
 
 [dependencies]
@@ -121,6 +122,7 @@ logforth-bridge-log.workspace = true
 futures-concurrency = "7.6.3"
 glob = "0.3.2"
 mimalloc-safe = { version = "0.1.50", optional = true }
+core_affinity = "0.8.3"
 
 [profile.release]
 codegen-units = 1

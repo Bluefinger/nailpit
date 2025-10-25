@@ -99,7 +99,7 @@ impl MarkovStream {
 impl Stream for MarkovStream {
     type Item = Bytes;
 
-    #[fastrace::trace]
+    #[cfg_attr(feature = "tracing", fastrace::trace)]
     fn poll_next(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,

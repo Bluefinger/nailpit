@@ -162,7 +162,9 @@ mod tests {
         let id = interner.intern(text);
 
         // SAFETY: It comes from the same source
-        unsafe { assert_eq!(text, interner.lookup(id)); }
+        unsafe {
+            assert_eq!(text, interner.lookup(id));
+        }
         assert_eq!(interner.buffer.len(), 11);
 
         let again = interner.intern(text);
@@ -185,8 +187,7 @@ mod tests {
             "Gibberish",
         ];
 
-        let interned: Vec<Token> =
-            texts.iter().map(|&text| interner.intern(text)).collect();
+        let interned: Vec<Token> = texts.iter().map(|&text| interner.intern(text)).collect();
 
         assert_eq!(
             interned.as_slice(),
@@ -219,14 +220,15 @@ mod tests {
             "Gibberish",
         ];
 
-        let interned: Vec<Token> =
-            texts.iter().map(|&text| interner.intern(text)).collect();
+        let interned: Vec<Token> = texts.iter().map(|&text| interner.intern(text)).collect();
 
         std::thread::scope(|s| {
             s.spawn(move || {
                 for (id, expected) in interned.into_iter().zip(texts) {
                     // SAFETY: It comes from the same source
-                    unsafe { assert_eq!(expected, interner.lookup(id)); }
+                    unsafe {
+                        assert_eq!(expected, interner.lookup(id));
+                    }
                 }
             });
         });

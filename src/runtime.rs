@@ -1,6 +1,8 @@
 use core::time::Duration;
 use std::sync::Arc;
 
+use color_eyre::eyre::OptionExt;
+
 use crate::app::App;
 
 pub fn start<Fut, F>(app: App, main_fn: F) -> color_eyre::Result<()>
@@ -14,13 +16,19 @@ where
 
     let shutdown_notifier = Arc::new(shutdown_notifier);
 
+    let mut core_ids = core_affinity::get_core_ids().ok_or_eyre("Failed to get CPU affinity")?;
+
+    let worker_cores = core_ids.split_off(1);
+
+    core_affinity::set_for_current(core_ids[0]);
+
     // Main worker MUST start, else we just error out.
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?;
 
     std::thread::scope(|s| {
-        for num in 1..workers.get() {
+        for (num, core_id) in (1..workers.get()).zip(worker_cores) {
             let cloned = &main_fn;
             let app = &app;
             let shutdown_notifier = &shutdown_notifier;
@@ -31,6 +39,8 @@ where
             std::thread::Builder::new()
                 .name(format!("Nailpit worker {num}"))
                 .spawn_scoped(s, move || {
+                    core_affinity::set_for_current(core_id);
+
                     match tokio::runtime::Builder::new_current_thread()
                         .enable_all()
                         .build()
