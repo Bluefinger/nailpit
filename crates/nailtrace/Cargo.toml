@@ -9,15 +9,16 @@ rust-version.workspace = true
 
 [dependencies]
 nailip = { path = "../nailip" }
+nailstate = { path = "../nailstate" }
 axum = { workspace = true, features = ["matched-path"] }
 tracing.workspace = true
 tracing-opentelemetry.workspace = true
+tracing-futures.workspace = true
 hyper.workspace = true
 tower-http.workspace = true
 pin-project-lite.workspace = true
+opentelemetry.workspace = true
 opentelemetry-semantic-conventions.workspace = true
-tracing-opentelemetry-instrumentation-sdk = { version = "0.32", features = ["http"]}
-uuid = { version = "1.17.0", features = ["v4", "fast-rng"] }
 
 [lints]
 workspace = true

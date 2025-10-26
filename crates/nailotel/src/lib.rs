@@ -1,4 +1,4 @@
-use std::sync::{Arc, LazyLock};
+use std::sync::{Arc, OnceLock};
 
 use color_eyre::Result;
 
@@ -14,18 +14,22 @@ use opentelemetry_sdk::{
 use opentelemetry_semantic_conventions::{SCHEMA_URL, resource::SERVICE_VERSION};
 use tracing::level_filters::LevelFilter;
 use tracing_opentelemetry::OpenTelemetryLayer;
-use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt};
+use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt, util::SubscriberInitExt};
 
-static RESOURCE: LazyLock<Resource> = LazyLock::new(resource);
+static RESOURCE: OnceLock<Resource> = OnceLock::new();
 
-fn resource() -> Resource {
-    Resource::builder()
-        .with_service_name(env!("CARGO_PKG_NAME"))
-        .with_schema_url(
-            [KeyValue::new(SERVICE_VERSION, env!("CARGO_PKG_VERSION"))],
-            SCHEMA_URL,
-        )
-        .build()
+fn resource(config: &NailConfig) -> Resource {
+    RESOURCE
+        .get_or_init(|| {
+            Resource::builder()
+                .with_service_name(config.open_telemetry.service_name.clone())
+                .with_schema_url(
+                    [KeyValue::new(SERVICE_VERSION, env!("CARGO_PKG_VERSION"))],
+                    SCHEMA_URL,
+                )
+                .build()
+        })
+        .clone()
 }
 
 pub fn init_logging_reporter(config: &NailConfig) -> Result<SdkLoggerProvider> {
@@ -39,7 +43,7 @@ pub fn init_logging_reporter(config: &NailConfig) -> Result<SdkLoggerProvider> {
 
     Ok(SdkLoggerProvider::builder()
         .with_batch_exporter(log_exporter)
-        .with_resource(RESOURCE.clone())
+        .with_resource(resource(config))
         .build())
 }
 
@@ -57,7 +61,7 @@ pub fn init_tracing_reporter(config: &NailConfig) -> Result<SdkTracerProvider> {
         .with_sampler(Sampler::ParentBased(Box::new(Sampler::TraceIdRatioBased(
             1.0,
         ))))
-        .with_resource(RESOURCE.clone())
+        .with_resource(resource(config))
         .with_id_generator(RandomIdGenerator::default())
         .build();
 
@@ -83,20 +87,27 @@ pub fn init_telemetry(
         .with(
             tracing_subscriber::filter::EnvFilter::builder()
                 .with_default_directive(LevelFilter::INFO.into())
-                .from_env_lossy(),
+                .from_env_lossy()
+                .add_directive("hyper=off".parse().unwrap())
+                .add_directive("opentelemetry=off".parse().unwrap())
+                .add_directive("tonic=off".parse().unwrap())
+                .add_directive("tower=off".parse().unwrap())
+                .add_directive("h2=off".parse().unwrap())
+                .add_directive("reqwest=off".parse().unwrap()),
         )
         .with(
             tracing_subscriber::fmt::layer()
                 .with_level(true)
                 .with_thread_names(true)
                 .with_writer(std::io::stdout)
-                .json(),
+                .compact(),
         )
         .with(otel_logger.as_ref().map(|otel| {
             let filter_otel = EnvFilter::new("info")
                 .add_directive("hyper=off".parse().unwrap())
                 .add_directive("opentelemetry=off".parse().unwrap())
                 .add_directive("tonic=off".parse().unwrap())
+                .add_directive("tower=off".parse().unwrap())
                 .add_directive("h2=off".parse().unwrap())
                 .add_directive("reqwest=off".parse().unwrap());
 
@@ -106,7 +117,8 @@ pub fn init_telemetry(
             otel_traces
                 .as_ref()
                 .map(|otel| OpenTelemetryLayer::new(otel.tracer("tracing-otel-subscriber"))),
-        );
+        )
+        .init();
 
     tracing::info!("Welcome to Nailpit!");
     tracing::info!(configuration = ?config, "Loaded configuration");

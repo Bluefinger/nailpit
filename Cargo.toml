@@ -46,6 +46,7 @@ pin-project-lite = "0.2.16"
 scc = "3.3.2"
 tracing = "0.1"
 tracing-opentelemetry = "0.32"
+tracing-futures = { version = "0.2", features = ["futures-03"] }
 tower = { version = "0.5.2" }
 tower-http = { version = "0.6.2", features = [
     "compression-br",

@@ -377,6 +377,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
+name = "futures"
+version = "0.3.31"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "65bc07b1a8bc7c85c5f2e110c476c7389b4554ba72af57d8445ea63a576b0876"
+dependencies = [
+ "futures-channel",
+ "futures-core",
+ "futures-executor",
+ "futures-io",
+ "futures-sink",
+ "futures-task",
+ "futures-util",
+]
+
+[[package]]
 name = "futures-buffered"
 version = "0.2.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -396,6 +411,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2dff15bf788c671c1934e366d07e30c1814a8ef514e1af724a602e8a2fbe1b10"
 dependencies = [
  "futures-core",
+ "futures-sink",
 ]
 
 [[package]]
@@ -478,10 +494,13 @@ version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9fa08315bb612088cc391249efdc3bc77536f16c91f6cf495e6fbe85b20a4a81"
 dependencies = [
+ "futures-channel",
  "futures-core",
+ "futures-io",
  "futures-macro",
  "futures-sink",
  "futures-task",
+ "memchr",
  "pin-project-lite",
  "pin-utils",
  "slab",
@@ -985,6 +1004,7 @@ dependencies = [
  "tokio",
  "tower",
  "tracing",
+ "tracing-futures",
 ]
 
 [[package]]
@@ -1013,6 +1033,7 @@ dependencies = [
  "tower",
  "tower-http",
  "tracing",
+ "tracing-futures",
 ]
 
 [[package]]
@@ -1046,6 +1067,7 @@ dependencies = [
  "axum",
  "futures-lite",
  "hyper",
+ "tracing",
 ]
 
 [[package]]
@@ -1055,13 +1077,14 @@ dependencies = [
  "axum",
  "hyper",
  "nailip",
+ "nailstate",
+ "opentelemetry",
  "opentelemetry-semantic-conventions",
  "pin-project-lite",
  "tower-http",
  "tracing",
+ "tracing-futures",
  "tracing-opentelemetry",
- "tracing-opentelemetry-instrumentation-sdk",
- "uuid",
 ]
 
 [[package]]
@@ -1906,6 +1929,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "tracing-futures"
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "97d095ae15e245a057c8e8451bab9b3ee1e1f68e9ba2b4fbc18d0ac5237835f2"
+dependencies = [
+ "futures",
+ "futures-task",
+ "pin-project",
+ "tracing",
+]
+
+[[package]]
 name = "tracing-log"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1933,19 +1968,6 @@ dependencies = [
  "tracing-log",
  "tracing-subscriber",
  "web-time",
-]
-
-[[package]]
-name = "tracing-opentelemetry-instrumentation-sdk"
-version = "0.32.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a1a4dcfb798af2cef9e47c30a14e13c108b4b40e057120401b2025ec622c416"
-dependencies = [
- "http",
- "opentelemetry",
- "opentelemetry-semantic-conventions",
- "tracing",
- "tracing-opentelemetry",
 ]
 
 [[package]]
@@ -2011,7 +2033,6 @@ checksum = "2f87b8aa10b915a06587d0dec516c282ff295b475d94abf425d62b57710070a2"
 dependencies = [
  "getrandom",
  "js-sys",
- "rand",
  "wasm-bindgen",
 ]
 

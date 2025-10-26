@@ -21,6 +21,7 @@ use parking_lot::Mutex;
 use rapidhash::quality::RandomState;
 use scc::HashMap;
 use tokio::time::sleep;
+use tracing_futures::{Instrument, Instrumented};
 
 const PEER_TIMEOUT: Duration = Duration::from_secs(60 * 2);
 
@@ -160,7 +161,7 @@ where
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future = NailedResponseFuture<S::Future>;
+    type Future = Instrumented<NailedResponseFuture<S::Future>>;
 
     fn poll_ready(
         &mut self,
@@ -169,9 +170,10 @@ where
         self.inner.poll_ready(cx)
     }
 
+    #[tracing::instrument(name = "rate_limiter", skip_all)]
     fn call(&mut self, req: Request<ReqBody>) -> Self::Future {
         let Some(proxied) = req.extensions().get::<IdentifiedPeer>() else {
-            return NailedResponseFuture::error();
+            return NailedResponseFuture::error().in_current_span();
         };
 
         let (peer_state, supports_spicy) = self.track_visiting_peer(proxied.ip(), req.headers());
@@ -189,15 +191,16 @@ where
                     })
                     .map_or_else(NailedResponseFuture::dropped, |(payload, kind)| {
                         NailedResponseFuture::spicy(payload, kind)
-                    });
+                    })
+                    .in_current_span();
             }
-            _ => return NailedResponseFuture::dropped(),
+            _ => return NailedResponseFuture::dropped().in_current_span(),
         };
 
         let prune = PRUNING_SCHEDULER.schedule(|| Self::prune(self.peers.clone()));
 
         let inner = self.inner.call(req);
 
-        NailedResponseFuture::normal(prune, delay, inner)
+        NailedResponseFuture::normal(prune, delay, inner).in_current_span()
     }
 }

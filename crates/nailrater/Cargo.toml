@@ -19,6 +19,7 @@ hyper.workspace = true
 pin-project-lite.workspace = true
 parking_lot.workspace = true
 tracing.workspace = true
+tracing-futures.workspace = true
 scc.workspace = true
 tokio.workspace = true
 rapidhash.workspace = true

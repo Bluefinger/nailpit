@@ -17,7 +17,9 @@ use tower_http::{
     normalize_path::NormalizePathLayer,
     request_id::MakeRequestUuid,
 };
+use tracing_futures::Instrument;
 
+#[tracing::instrument(skip_all)]
 async fn warning(
     config: AppConfig,
     inputs: NailInputs,
@@ -26,15 +28,21 @@ async fn warning(
 ) -> impl IntoResponse {
     let mut rng = FastRng::default();
 
-    NailResponseStream::from_stream(inputs.get_random_input(&mut rng).into_stream(
-        matched,
-        config.clone_inner(),
-        inputs.get_interner(),
-        Template::from(generated_template),
-        rng,
-    ))
+    NailResponseStream::from_stream(
+        inputs
+            .get_random_input(&mut rng)
+            .into_stream(
+                matched,
+                config.clone_inner(),
+                inputs.get_interner(),
+                Template::from(generated_template),
+                rng,
+            )
+            .in_current_span(),
+    )
 }
 
+#[tracing::instrument(skip_all)]
 async fn generated(
     config: AppConfig,
     inputs: NailInputs,
@@ -43,13 +51,18 @@ async fn generated(
 ) -> impl IntoResponse {
     let mut rng = FastRng::default();
 
-    NailResponseStream::from_stream(inputs.get_random_input(&mut rng).into_stream(
-        matched,
-        config.clone_inner(),
-        inputs.get_interner(),
-        Template::from(generated_template),
-        rng,
-    ))
+    NailResponseStream::from_stream(
+        inputs
+            .get_random_input(&mut rng)
+            .into_stream(
+                matched,
+                config.clone_inner(),
+                inputs.get_interner(),
+                Template::from(generated_template),
+                rng,
+            )
+            .in_current_span(),
+    )
 }
 
 pub fn nail_app(state: ServerState, spicy_payload: Option<Arc<SpicyPayloads>>) -> Router {
