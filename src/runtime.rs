@@ -37,7 +37,7 @@ where
             // runtime within the worker thread fails to be created, this won't terminate the
             // program, but the error will get logged.
             std::thread::Builder::new()
-                .name(format!("Nailpit worker {num}"))
+                .name(format!("worker {num}"))
                 .spawn_scoped(s, move || {
                     core_affinity::set_for_current(core_id);
 
@@ -50,35 +50,36 @@ where
                             while let Err(e) =
                                 rt.block_on(cloned(app.clone(), shutdown_notifier.clone()))
                             {
-                                log::error!(error:% = e, worker = num; "Failed to start");
+                                tracing::error!(error = %e, worker = num, "Failed to start");
                                 // Wait a moment before trying again
                                 std::thread::sleep(Duration::from_secs(1));
-                                log::info!(worker = num; "Restarting Worker...");
+                                tracing::info!(worker = num, "Restarting Worker...");
                             }
 
                             rt.shutdown_timeout(Duration::from_secs(60));
                         }
-                        Err(e) => log::error!(error:% = e, worker = num; "Failed to start"),
+                        Err(e) => tracing::error!(error = %e, worker = num, "Failed to start"),
                     }
                 })?;
         }
 
         rt.block_on(async {
-            nailotel::init_telemetry(app.config.clone())?;
+            let _guard = nailotel::init_telemetry(app.config.clone())?;
+
+            tracing::info!(message = "Welcome to Nailpit!");
+            tracing::info!(configuration = ?app.config, message = "Loaded configuration");
 
             let handle = tokio::spawn(crate::shutdown::shutdown_task(shutdown_signal));
 
             // If we hit an application error case, restart the worker.
             while let Err(e) = main_fn(app.clone(), shutdown_notifier.clone()).await {
-                log::error!(error:% = e, worker = 0; "Failed to start");
+                tracing::error!(error = %e, worker = 0, "Failed to start");
                 // Wait a moment before trying again
                 tokio::time::sleep(Duration::from_secs(1)).await;
-                log::info!(worker = 0; "Restarting Worker...");
+                tracing::info!(worker = 0, "Restarting Worker...");
             }
 
-            log::info!("Waiting for background tasks to complete...");
-
-            tokio::time::sleep(Duration::from_secs(1)).await;
+            tracing::info!("Waiting for background tasks to complete...");
 
             handle.await?
         })

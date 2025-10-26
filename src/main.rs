@@ -14,8 +14,15 @@ async fn spawn_axum_worker(
 ) -> Result<()> {
     let state = nailstate::ServerState::new(app.config, app.inputs, app.interner, app.templates);
     let listener = nailnet::get_tcp_socket(&state.config.server.socket_addr)?;
+    let ip = listener.local_addr()?;
 
-    log::info!(port:% = listener.local_addr()?; "Worker listening on");
+    tracing::info!(
+        port = ip.port(),
+        address = ip.ip().to_string(),
+        "{} listening on {}",
+        std::thread::current().name().unwrap(),
+        ip
+    );
 
     axum::serve(
         listener,
@@ -29,7 +36,6 @@ async fn spawn_axum_worker(
 
 fn main() -> Result<()> {
     color_eyre::install()?;
-    logforth_bridge_log::try_setup()?;
 
     let config = nailconfig::get_configuration()?;
 

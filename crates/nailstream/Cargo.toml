@@ -14,3 +14,4 @@ workspace = true
 axum.workspace = true
 hyper.workspace = true
 futures-lite.workspace = true
+tracing.workspace = true

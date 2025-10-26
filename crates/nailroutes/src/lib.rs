@@ -1,17 +1,14 @@
 use std::sync::Arc;
 
 use axum::{Router, extract::MatchedPath, response::IntoResponse, routing::get};
-use fastrace::Span;
-use fastrace_futures::StreamExt;
 use hyper::StatusCode;
 use nailgen::{GeneratedTemplate, Template, WarningTemplate};
-use nailip::identify_peer;
 use nailrater::NailRaterLayer;
 use nailrng::FastRng;
 use nailspicy::SpicyPayloads;
 use nailstate::{AppConfig, NailInputs, ServerState};
 use nailstream::NailResponseStream;
-use nailtrace::tracing_root_span;
+use nailtrace::trace_connection_layer;
 use tower::ServiceBuilder;
 use tower_http::{
     CompressionLevel, ServiceBuilderExt,
@@ -19,8 +16,9 @@ use tower_http::{
     normalize_path::NormalizePathLayer,
     request_id::MakeRequestUuid,
 };
+use tracing_futures::Instrument;
 
-#[fastrace::trace]
+#[tracing::instrument(skip_all)]
 async fn warning(
     config: AppConfig,
     inputs: NailInputs,
@@ -39,11 +37,11 @@ async fn warning(
                 Template::from(generated_template),
                 rng,
             )
-            .in_span(Span::enter_with_local_parent("Warning page stream")),
+            .in_current_span(),
     )
 }
 
-#[fastrace::trace]
+#[tracing::instrument(skip_all)]
 async fn generated(
     config: AppConfig,
     inputs: NailInputs,
@@ -62,19 +60,21 @@ async fn generated(
                 Template::from(generated_template),
                 rng,
             )
-            .in_span(Span::enter_with_local_parent("Generated stream")),
+            .in_current_span(),
     )
 }
 
 pub fn nail_app(state: ServerState, spicy_payload: Option<Arc<SpicyPayloads>>) -> Router {
     let rate_limiting = state.config.rate_limiting.clone();
 
-    nail_route(state)
+    nail_route(state.clone())
         .layer(
             ServiceBuilder::new()
                 .set_x_request_id(MakeRequestUuid)
-                .layer(axum::middleware::from_fn(identify_peer))
-                .layer(axum::middleware::from_fn(tracing_root_span))
+                .layer(axum::middleware::from_fn_with_state(
+                    state,
+                    trace_connection_layer,
+                ))
                 .layer(NormalizePathLayer::trim_trailing_slash())
                 .layer(
                     CompressionLayer::new()

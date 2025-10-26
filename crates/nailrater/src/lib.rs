@@ -8,10 +8,6 @@ use std::{
 };
 
 use axum::{body::Body, extract::Request, response::Response};
-use fastrace::{
-    Span,
-    future::{FutureExt as SpanFutureExt, InSpan},
-};
 use futures::NailedResponseFuture;
 use futures_lite::future::Boxed;
 
@@ -25,6 +21,7 @@ use parking_lot::Mutex;
 use rapidhash::quality::RandomState;
 use scc::HashMap;
 use tokio::time::sleep;
+use tracing_futures::{Instrument, Instrumented};
 
 const PEER_TIMEOUT: Duration = Duration::from_secs(60 * 2);
 
@@ -122,6 +119,10 @@ impl<S> NailRater<S> {
     }
 
     #[inline]
+    #[cfg_attr(
+        feature = "detailed_traces",
+        tracing::instrument(level = "trace", skip_all)
+    )]
     fn track_visiting_peer(
         &self,
         proxied: IpAddr,
@@ -146,9 +147,13 @@ impl<S> NailRater<S> {
     }
 
     #[inline]
+    #[cfg_attr(
+        feature = "detailed_traces",
+        tracing::instrument(name = "prune_old_peers", level = "trace", skip_all)
+    )]
     fn prune(peers: Arc<HashMap<IpAddr, Peer, RandomState>>) -> Boxed<()> {
         boxed_future_within(async move || {
-            log::trace!("PRUNING STARTED");
+            tracing::trace!("PRUNING STARTED");
 
             peers
                 .retain_async(|_, v| v.last_seen.elapsed() < crate::PEER_TIMEOUT)
@@ -164,7 +169,7 @@ where
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future = InSpan<NailedResponseFuture<S::Future>>;
+    type Future = Instrumented<NailedResponseFuture<S::Future>>;
 
     fn poll_ready(
         &mut self,
@@ -173,11 +178,10 @@ where
         self.inner.poll_ready(cx)
     }
 
+    #[tracing::instrument(name = "rate_limiter", skip_all)]
     fn call(&mut self, req: Request<ReqBody>) -> Self::Future {
-        let parent = Span::enter_with_local_parent("NailRater");
-
         let Some(proxied) = req.extensions().get::<IdentifiedPeer>() else {
-            return NailedResponseFuture::error().in_span(parent);
+            return NailedResponseFuture::error().in_current_span();
         };
 
         let (peer_state, supports_spicy) = self.track_visiting_peer(proxied.ip(), req.headers());
@@ -196,15 +200,15 @@ where
                     .map_or_else(NailedResponseFuture::dropped, |(payload, kind)| {
                         NailedResponseFuture::spicy(payload, kind)
                     })
-                    .in_span(parent);
+                    .in_current_span();
             }
-            _ => return NailedResponseFuture::dropped().in_span(parent),
+            _ => return NailedResponseFuture::dropped().in_current_span(),
         };
 
         let prune = PRUNING_SCHEDULER.schedule(|| Self::prune(self.peers.clone()));
 
         let inner = self.inner.call(req);
 
-        NailedResponseFuture::normal(prune, delay, inner).in_span(parent)
+        NailedResponseFuture::normal(prune, delay, inner).in_current_span()
     }
 }

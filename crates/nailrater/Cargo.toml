@@ -7,6 +7,9 @@ version.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+[features]
+detailed_traces = []
+
 [dependencies]
 nailfv = { path = "../nailfv" }
 nailconfig = { path = "../nailconfig" }
@@ -18,12 +21,12 @@ futures-lite.workspace = true
 hyper.workspace = true
 pin-project-lite.workspace = true
 parking_lot.workspace = true
-log.workspace = true
+tracing.workspace = true
+tracing-futures.workspace = true
 scc.workspace = true
 tokio.workspace = true
 rapidhash.workspace = true
 tower.workspace = true
-fastrace.workspace = true
 
 [lints]
 workspace = true

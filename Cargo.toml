@@ -24,7 +24,6 @@ axum-core = { version = "0.5.0", default-features = false }
 bytes = "1.10.1"
 hyper = { version = "1.6.0", default-features = false, features = ["server"] }
 color-eyre = { version = "0.6.3", default-features = false }
-log = { version = "0.4.27", features = ["std", "kv", "kv_std", "kv_serde"] }
 serde = { version = "1.0.219", features = ["derive"] }
 rand_core = "0.9.3"
 rand = { version = "0.9", default-features = false }
@@ -35,30 +34,18 @@ hashbrown = { version = "0.15.2", default-features = false, features = [
     "inline-more",
 ] }
 rapidhash = { version = "4.1.0", default-features = false }
-fastrace = { version = "0.7.9" }
-fastrace-futures = { version = "0.7.9" }
-logforth = { version = "0.28", features = [
-    "append-fastrace",
-    "append-opentelemetry",
-    "diagnostic-fastrace",
-] }
-logforth-bridge-log = "0.2"
 unicode-segmentation = "1.12.0"
 itertools = "0.14.0"
 indexmap = "2.9.0"
 parking_lot = "0.12"
-tokio = { version = "1.44.2", features = [
-    "rt",
-    "sync",
-    "time",
-    "parking_lot",
-    "net",
-    "signal",
-] }
+tokio = { version = "1.44.2", features = ["rt", "sync", "time", "parking_lot", "net", "signal"] }
 tokio-stream = { version = "0.1.17" }
 futures-lite = "2.6.0"
 pin-project-lite = "0.2.16"
 scc = "3.3.2"
+tracing = "0.1"
+tracing-opentelemetry = "0.32"
+tracing-futures = { version = "0.2", features = ["futures-03"] }
 tower = { version = "0.5.2" }
 tower-http = { version = "0.6.2", features = [
     "compression-br",
@@ -70,8 +57,15 @@ tower-http = { version = "0.6.2", features = [
     "util",
 ] }
 opentelemetry = { version = "0.31.0", default-features = false, features = ["trace", "logs"] }
-opentelemetry-otlp = { version = "0.31.0", default-features = false, features = ["trace", "logs", "grpc-tonic", "zstd-tonic"] }
+opentelemetry-http = "0.31"
+opentelemetry-otlp = { version = "0.31.0", default-features = false, features = [
+    "trace",
+    "logs",
+    "grpc-tonic",
+    "zstd-tonic",
+] }
 opentelemetry_sdk = { version = "0.31.0", default-features = false, features = ["trace", "logs"] }
+opentelemetry-semantic-conventions = "0.31"
 winnow = { version = "0.7.6", features = ["simd"] }
 
 [package]
@@ -95,9 +89,8 @@ name = "nailpit"
 
 [features]
 default = ["mimalloc"]
-tracing = ["nailotel/tracing"]
-debug_tracing = ["nailgen/tracing"]
 mimalloc = ["dep:mimalloc-safe"]
+detailed_traces = ["nailgen/detailed_traces", "nailrater/detailed_traces"]
 
 [dependencies]
 nailkov = { path = "crates/nailkov" }
@@ -107,18 +100,17 @@ nailstream = { path = "crates/nailstream" }
 nailgen = { path = "crates/nailgen" }
 nailrater = { path = "crates/nailrater" }
 nailtrace = { path = "crates/nailtrace" }
+nailotel = { path = "crates/nailotel" }
 nailstate = { path = "crates/nailstate" }
 nailip = { path = "crates/nailip" }
-nailotel = { path = "crates/nailotel" }
 nailroutes = { path = "crates/nailroutes" }
 nailspicy = { path = "crates/nailspicy" }
 nailnet = { path = "crates/nailnet" }
 nailbox = { path = "crates/nailbox" }
 axum.workspace = true
 tokio.workspace = true
+tracing.workspace = true
 color-eyre.workspace = true
-log.workspace = true
-logforth-bridge-log.workspace = true
 futures-concurrency = "7.6.3"
 glob = "0.3.2"
 mimalloc-safe = { version = "0.1.50", optional = true }
