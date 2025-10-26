@@ -2,7 +2,10 @@ use core::net::SocketAddr;
 use std::borrow::Cow;
 
 use axum::{
-    extract::{ConnectInfo, MatchedPath, Request}, http::HeaderName, middleware::Next, response::Response, Extension
+    Extension,
+    extract::{ConnectInfo, MatchedPath, Request},
+    middleware::Next,
+    response::Response,
 };
 use hyper::{
     HeaderMap, Uri, Version,
@@ -10,34 +13,19 @@ use hyper::{
 };
 use nailip::{IdentifiedPeer, header_value_to_str};
 use nailstate::AppConfig;
-use opentelemetry::{propagation::Extractor, Context};
+use opentelemetry::Context;
+use opentelemetry_http::HeaderExtractor;
 use opentelemetry_semantic_conventions::{
     attribute::OTEL_STATUS_CODE,
     trace::{HTTP_RESPONSE_STATUS_CODE, SERVER_ADDRESS, SERVER_PORT},
 };
 use tower_http::request_id::RequestId;
-use tracing::{field::Empty, info_span, Span};
-
-pub struct HeaderExtractor<'a>(pub &'a HeaderMap);
-
-impl Extractor for HeaderExtractor<'_> {
-    /// Get a value for a key from the `HeaderMap`. If the value is not valid ASCII, returns None.
-    fn get(&self, key: &str) -> Option<&str> {
-        self.0.get(key).and_then(|value| value.to_str().ok())
-    }
-
-    /// Collect all the keys from the `HeaderMap`.
-    fn keys(&self) -> Vec<&str> {
-        self.0
-            .keys()
-            .map(HeaderName::as_str)
-            .collect::<Vec<_>>()
-    }
-}
+use tracing::{Span, field::Empty, info_span};
 
 pub fn extract_context(headers: &HeaderMap) -> Context {
-    let extractor = HeaderExtractor(headers);
-    opentelemetry::global::get_text_map_propagator(|propagator| propagator.extract(&extractor))
+    opentelemetry::global::get_text_map_propagator(|propagator| {
+        propagator.extract(&HeaderExtractor(headers))
+    })
 }
 
 #[inline]

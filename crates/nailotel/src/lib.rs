@@ -3,12 +3,15 @@ use std::sync::{Arc, OnceLock};
 use color_eyre::Result;
 
 use nailconfig::NailConfig;
-use opentelemetry::{KeyValue, trace::TracerProvider};
+use opentelemetry::{
+    KeyValue, global, propagation::TextMapCompositePropagator, trace::TracerProvider,
+};
 use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
 use opentelemetry_otlp::{LogExporter, Protocol, SpanExporter, WithExportConfig, WithTonicConfig};
 use opentelemetry_sdk::{
     Resource,
     logs::SdkLoggerProvider,
+    propagation::{BaggagePropagator, TraceContextPropagator},
     trace::{RandomIdGenerator, Sampler, SdkTracerProvider},
 };
 use opentelemetry_semantic_conventions::{SCHEMA_URL, resource::SERVICE_VERSION};
@@ -48,6 +51,15 @@ pub fn init_logging_reporter(config: &NailConfig) -> Result<SdkLoggerProvider> {
 }
 
 pub fn init_tracing_reporter(config: &NailConfig) -> Result<SdkTracerProvider> {
+    let baggage_propagator = BaggagePropagator::new();
+    let trace_context_propagator = TraceContextPropagator::new();
+    let composite_propagator = TextMapCompositePropagator::new(vec![
+        Box::new(baggage_propagator),
+        Box::new(trace_context_propagator),
+    ]);
+
+    global::set_text_map_propagator(composite_propagator);
+
     let trace_exporter = SpanExporter::builder()
         .with_tonic()
         .with_endpoint(&config.open_telemetry.endpoint)
