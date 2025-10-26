@@ -3,13 +3,12 @@ use std::sync::Arc;
 use axum::{Router, extract::MatchedPath, response::IntoResponse, routing::get};
 use hyper::StatusCode;
 use nailgen::{GeneratedTemplate, Template, WarningTemplate};
-use nailip::identify_peer;
 use nailrater::NailRaterLayer;
 use nailrng::FastRng;
 use nailspicy::SpicyPayloads;
 use nailstate::{AppConfig, NailInputs, ServerState};
 use nailstream::NailResponseStream;
-use nailtrace::tracing_root_span;
+use nailtrace::trace_connection_layer;
 use tower::ServiceBuilder;
 use tower_http::{
     CompressionLevel, ServiceBuilderExt,
@@ -72,10 +71,9 @@ pub fn nail_app(state: ServerState, spicy_payload: Option<Arc<SpicyPayloads>>) -
         .layer(
             ServiceBuilder::new()
                 .set_x_request_id(MakeRequestUuid)
-                .layer(axum::middleware::from_fn(identify_peer))
                 .layer(axum::middleware::from_fn_with_state(
                     state,
-                    tracing_root_span,
+                    trace_connection_layer,
                 ))
                 .layer(NormalizePathLayer::trim_trailing_slash())
                 .layer(

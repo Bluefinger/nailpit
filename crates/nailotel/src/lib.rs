@@ -113,11 +113,9 @@ pub fn init_telemetry(
 
             OpenTelemetryTracingBridge::new(otel).with_filter(filter_otel)
         }))
-        .with(
-            otel_traces
-                .as_ref()
-                .map(|otel| OpenTelemetryLayer::new(otel.tracer("tracing-otel-subscriber"))),
-        )
+        .with(otel_traces.as_ref().map(|otel| {
+            OpenTelemetryLayer::new(otel.tracer(config.open_telemetry.service_name.clone()))
+        }))
         .init();
 
     tracing::info!("Welcome to Nailpit!");

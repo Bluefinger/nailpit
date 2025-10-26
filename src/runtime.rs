@@ -37,7 +37,7 @@ where
             // runtime within the worker thread fails to be created, this won't terminate the
             // program, but the error will get logged.
             std::thread::Builder::new()
-                .name(format!("Nailpit worker {num}"))
+                .name(format!("worker {num}"))
                 .spawn_scoped(s, move || {
                     core_affinity::set_for_current(core_id);
 
@@ -64,7 +64,6 @@ where
         }
 
         rt.block_on(async {
-            // nailotel::init_telemetry(app.config.clone())?;
             let _guard = nailotel::init_telemetry(app.config.clone())?;
 
             tracing::info!(message = "Welcome to Nailpit!");
@@ -81,8 +80,6 @@ where
             }
 
             tracing::info!("Waiting for background tasks to complete...");
-
-            // tokio::time::sleep(Duration::from_secs(1)).await;
 
             handle.await?
         })

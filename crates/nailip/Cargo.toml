@@ -19,7 +19,7 @@ scc.workspace = true
 tokio.workspace = true
 wyrand.workspace = true
 tower.workspace = true
-log.workspace = true
+tracing.workspace = true
 
 [lints]
 workspace = true

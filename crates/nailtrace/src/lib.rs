@@ -58,15 +58,18 @@ pub fn http_flavor(version: Version) -> Cow<'static, str> {
     }
 }
 
-pub async fn tracing_root_span(
+pub async fn trace_connection_layer(
     config: AppConfig,
     request_id: Extension<RequestId>,
-    peer: Extension<IdentifiedPeer>,
     connection: ConnectInfo<SocketAddr>,
-    req: Request,
+    mut req: Request,
     next: Next,
 ) -> Response {
     use tracing_opentelemetry::OpenTelemetrySpanExt;
+
+    let peer = IdentifiedPeer::extract(req.headers(), &connection);
+
+    req.extensions_mut().insert(peer);
 
     if config.open_telemetry.traces {
         let headers = req.headers();

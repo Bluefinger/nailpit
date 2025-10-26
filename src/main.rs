@@ -19,7 +19,9 @@ async fn spawn_axum_worker(
     tracing::info!(
         port = ip.port(),
         address = ip.ip().to_string(),
-        "Worker listening on {ip}"
+        "{} listening on {}",
+        std::thread::current().name().unwrap(),
+        ip
     );
 
     axum::serve(

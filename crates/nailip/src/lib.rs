@@ -1,10 +1,6 @@
 use core::net::{IpAddr, SocketAddr};
 
-use axum::{
-    extract::{ConnectInfo, Request},
-    middleware::Next,
-    response::Response,
-};
+use axum::extract::ConnectInfo;
 use hyper::HeaderMap;
 
 pub use crate::maybe_header::*;
@@ -25,7 +21,7 @@ impl core::hash::Hash for IdentifiedPeer {
 }
 
 impl IdentifiedPeer {
-    fn extract(headers: &HeaderMap, connection: &ConnectInfo<SocketAddr>) -> Self {
+    pub fn extract(headers: &HeaderMap, connection: &ConnectInfo<SocketAddr>) -> Self {
         Self(
             maybe_x_forwarded_for(headers)
                 .or_else(|| maybe_x_real_ip(headers))
@@ -43,16 +39,4 @@ impl core::fmt::Display for IdentifiedPeer {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "{}", self.0)
     }
-}
-
-pub async fn identify_peer(
-    connection: ConnectInfo<SocketAddr>,
-    mut req: Request,
-    next: Next,
-) -> Response {
-    let extracted = IdentifiedPeer::extract(req.headers(), &connection);
-
-    req.extensions_mut().insert(extracted);
-
-    next.run(req).await
 }

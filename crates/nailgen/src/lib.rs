@@ -99,6 +99,10 @@ impl MarkovStream {
 impl Stream for MarkovStream {
     type Item = Bytes;
 
+    #[cfg_attr(
+        feature = "detailed_traces",
+        tracing::instrument(level = "trace", name = "MarkovStream::poll_next", skip_all)
+    )]
     fn poll_next(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
@@ -203,7 +207,8 @@ impl Stream for MarkovStream {
                             tracing::trace!(
                                 "payload.size" = *this.total_bytes,
                                 "duration.us" = elapsed_time,
-                                "Stream finished in {:.2}ms", (elapsed_time as f32) * 1e-3
+                                "Stream finished in {:.2}ms",
+                                (elapsed_time as f32) * 1e-3
                             );
 
                             this.state.set(GeneratorState::Finished);

@@ -11,6 +11,7 @@ rust-version.workspace = true
 workspace = true
 
 [features]
+detailed_traces = []
 
 [dependencies]
 nailkov = { path = "../nailkov" }

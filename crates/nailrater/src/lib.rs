@@ -119,6 +119,10 @@ impl<S> NailRater<S> {
     }
 
     #[inline]
+    #[cfg_attr(
+        feature = "detailed_traces",
+        tracing::instrument(level = "trace", skip_all)
+    )]
     fn track_visiting_peer(
         &self,
         proxied: IpAddr,
@@ -143,6 +147,10 @@ impl<S> NailRater<S> {
     }
 
     #[inline]
+    #[cfg_attr(
+        feature = "detailed_traces",
+        tracing::instrument(name = "prune_old_peers", level = "trace", skip_all)
+    )]
     fn prune(peers: Arc<HashMap<IpAddr, Peer, RandomState>>) -> Boxed<()> {
         boxed_future_within(async move || {
             tracing::trace!("PRUNING STARTED");
