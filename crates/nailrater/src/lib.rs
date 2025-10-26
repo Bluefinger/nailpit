@@ -8,10 +8,6 @@ use std::{
 };
 
 use axum::{body::Body, extract::Request, response::Response};
-use fastrace::{
-    Span,
-    future::{FutureExt as SpanFutureExt, InSpan},
-};
 use futures::NailedResponseFuture;
 use futures_lite::future::Boxed;
 
@@ -148,7 +144,7 @@ impl<S> NailRater<S> {
     #[inline]
     fn prune(peers: Arc<HashMap<IpAddr, Peer, RandomState>>) -> Boxed<()> {
         boxed_future_within(async move || {
-            log::trace!("PRUNING STARTED");
+            tracing::trace!("PRUNING STARTED");
 
             peers
                 .retain_async(|_, v| v.last_seen.elapsed() < crate::PEER_TIMEOUT)
@@ -164,7 +160,7 @@ where
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future = InSpan<NailedResponseFuture<S::Future>>;
+    type Future = NailedResponseFuture<S::Future>;
 
     fn poll_ready(
         &mut self,
@@ -174,10 +170,8 @@ where
     }
 
     fn call(&mut self, req: Request<ReqBody>) -> Self::Future {
-        let parent = Span::enter_with_local_parent("NailRater");
-
         let Some(proxied) = req.extensions().get::<IdentifiedPeer>() else {
-            return NailedResponseFuture::error().in_span(parent);
+            return NailedResponseFuture::error();
         };
 
         let (peer_state, supports_spicy) = self.track_visiting_peer(proxied.ip(), req.headers());
@@ -195,16 +189,15 @@ where
                     })
                     .map_or_else(NailedResponseFuture::dropped, |(payload, kind)| {
                         NailedResponseFuture::spicy(payload, kind)
-                    })
-                    .in_span(parent);
+                    });
             }
-            _ => return NailedResponseFuture::dropped().in_span(parent),
+            _ => return NailedResponseFuture::dropped(),
         };
 
         let prune = PRUNING_SCHEDULER.schedule(|| Self::prune(self.peers.clone()));
 
         let inner = self.inner.call(req);
 
-        NailedResponseFuture::normal(prune, delay, inner).in_span(parent)
+        NailedResponseFuture::normal(prune, delay, inner)
     }
 }

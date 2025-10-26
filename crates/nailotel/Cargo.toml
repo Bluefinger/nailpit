@@ -8,18 +8,18 @@ license.workspace = true
 rust-version.workspace = true
 
 [features]
-tracing = ["fastrace/enable"]
 
 [dependencies]
 nailconfig = { path = "../nailconfig" }
-log = { workspace = true, features = ["kv"] }
-fastrace.workspace = true
-logforth = { workspace = true, features = ["layout-text", "layout-json", "bridge-log"] }
-fastrace-opentelemetry = "0.14.0"
+tracing.workspace = true
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tracing-opentelemetry = { version = "0.32" }
 color-eyre.workspace = true
 opentelemetry.workspace = true
 opentelemetry-otlp.workspace = true
 opentelemetry_sdk.workspace = true
+opentelemetry-semantic-conventions.workspace = true
+opentelemetry-appender-tracing = "0.31"
 
 [lints]
 workspace = true

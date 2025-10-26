@@ -99,7 +99,6 @@ impl MarkovStream {
 impl Stream for MarkovStream {
     type Item = Bytes;
 
-    #[cfg_attr(feature = "tracing", fastrace::trace)]
     fn poll_next(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
@@ -201,9 +200,9 @@ impl Stream for MarkovStream {
                         template::TemplateState::Finished => {
                             let elapsed_time = this.start_time.elapsed().as_micros();
 
-                            log::trace!(
+                            tracing::trace!(
                                 "payload.size" = *this.total_bytes,
-                                "duration.us" = elapsed_time;
+                                "duration.us" = elapsed_time,
                                 "Stream finished in {:.2}ms", (elapsed_time as f32) * 1e-3
                             );
 

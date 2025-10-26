@@ -19,5 +19,5 @@ rand.workspace = true
 rand_distr.workspace = true
 itertools.workspace = true
 unicode-segmentation.workspace = true
-log.workspace = true
+tracing.workspace = true
 indexmap.workspace = true

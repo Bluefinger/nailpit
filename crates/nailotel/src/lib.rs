@@ -1,21 +1,34 @@
-use std::{borrow::Cow, sync::Arc};
+use std::sync::{Arc, LazyLock};
 
 use color_eyre::Result;
-use fastrace::collector::Config;
-use fastrace_opentelemetry::OpenTelemetryReporter;
-use logforth::{
-    append::{
-        OpentelemetryLog,
-        opentelemetry::{MakeBodyLayout, OpentelemetryLogBuilder},
-    },
-    layout::{JsonLayout, TextLayout},
-};
-use nailconfig::NailConfig;
-use opentelemetry::InstrumentationScope;
-use opentelemetry_otlp::{LogExporter, Protocol, SpanExporter, WithExportConfig, WithTonicConfig};
-use opentelemetry_sdk::Resource;
 
-pub fn init_logging_reporter(config: &NailConfig) -> Result<OpentelemetryLog> {
+use nailconfig::NailConfig;
+use opentelemetry::{KeyValue, trace::TracerProvider};
+use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
+use opentelemetry_otlp::{LogExporter, Protocol, SpanExporter, WithExportConfig, WithTonicConfig};
+use opentelemetry_sdk::{
+    Resource,
+    logs::SdkLoggerProvider,
+    trace::{RandomIdGenerator, Sampler, SdkTracerProvider},
+};
+use opentelemetry_semantic_conventions::{SCHEMA_URL, resource::SERVICE_VERSION};
+use tracing::level_filters::LevelFilter;
+use tracing_opentelemetry::OpenTelemetryLayer;
+use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt};
+
+static RESOURCE: LazyLock<Resource> = LazyLock::new(resource);
+
+fn resource() -> Resource {
+    Resource::builder()
+        .with_service_name(env!("CARGO_PKG_NAME"))
+        .with_schema_url(
+            [KeyValue::new(SERVICE_VERSION, env!("CARGO_PKG_VERSION"))],
+            SCHEMA_URL,
+        )
+        .build()
+}
+
+pub fn init_logging_reporter(config: &NailConfig) -> Result<SdkLoggerProvider> {
     let log_exporter = LogExporter::builder()
         .with_tonic()
         .with_endpoint(&config.open_telemetry.endpoint)
@@ -24,69 +37,79 @@ pub fn init_logging_reporter(config: &NailConfig) -> Result<OpentelemetryLog> {
         .with_timeout(opentelemetry_otlp::OTEL_EXPORTER_OTLP_TIMEOUT_DEFAULT)
         .build()?;
 
-    let builder =
-        OpentelemetryLogBuilder::new(config.open_telemetry.service_name.to_owned(), log_exporter);
-
-    Ok(builder
-        .label(
-            "service.name",
-            config.open_telemetry.service_name.to_owned(),
-        )
-        .make_body(MakeBodyLayout::new(JsonLayout::default()))
+    Ok(SdkLoggerProvider::builder()
+        .with_batch_exporter(log_exporter)
+        .with_resource(RESOURCE.clone())
         .build())
 }
 
-pub fn init_tracing_reporter(config: &NailConfig) -> Result<()> {
-    let reporter = OpenTelemetryReporter::new(
-        SpanExporter::builder()
-            .with_tonic()
-            .with_endpoint(&config.open_telemetry.endpoint)
-            .with_protocol(Protocol::Grpc)
-            .with_timeout(opentelemetry_otlp::OTEL_EXPORTER_OTLP_TIMEOUT_DEFAULT)
-            .with_compression(opentelemetry_otlp::Compression::Zstd)
-            .build()?,
-        Cow::Owned(
-            Resource::builder()
-                .with_service_name(config.open_telemetry.service_name.to_owned())
-                .build(),
-        ),
-        InstrumentationScope::builder(config.open_telemetry.service_name.to_owned())
-            .with_version(env!("CARGO_PKG_VERSION"))
-            .build(),
-    );
+pub fn init_tracing_reporter(config: &NailConfig) -> Result<SdkTracerProvider> {
+    let trace_exporter = SpanExporter::builder()
+        .with_tonic()
+        .with_endpoint(&config.open_telemetry.endpoint)
+        .with_protocol(Protocol::Grpc)
+        .with_timeout(opentelemetry_otlp::OTEL_EXPORTER_OTLP_TIMEOUT_DEFAULT)
+        .with_compression(opentelemetry_otlp::Compression::Zstd)
+        .build()?;
 
-    fastrace::set_reporter(reporter, Config::default());
+    let provider = SdkTracerProvider::builder()
+        .with_batch_exporter(trace_exporter)
+        .with_sampler(Sampler::ParentBased(Box::new(Sampler::TraceIdRatioBased(
+            1.0,
+        ))))
+        .with_resource(RESOURCE.clone())
+        .with_id_generator(RandomIdGenerator::default())
+        .build();
 
-    Ok(())
+    Ok(provider)
 }
 
-pub fn init_telemetry(config: Arc<nailconfig::NailConfig>) -> Result<()> {
-    let otel_logger = init_logging_reporter(config.as_ref())?;
+pub fn init_telemetry(
+    config: Arc<nailconfig::NailConfig>,
+) -> Result<(Option<SdkLoggerProvider>, Option<SdkTracerProvider>)> {
+    let otel_logger = if config.open_telemetry.logs {
+        Some(init_logging_reporter(config.as_ref())?)
+    } else {
+        None
+    };
 
-    logforth::core::builder()
-        .dispatch(|d| {
-            let d = d.filter(
-                logforth::filter::env_filter::EnvFilterBuilder::from_default_env_or("info").build(),
-            );
+    let otel_traces = if config.open_telemetry.traces {
+        Some(init_tracing_reporter(config.as_ref())?)
+    } else {
+        None
+    };
 
-            if config.open_telemetry.logs {
-                d.diagnostic(logforth::diagnostic::FastraceDiagnostic::default())
-                    .append(logforth::append::FastraceEvent::default())
-                    .append(otel_logger)
-                    .append(logforth::append::Stderr::default().with_layout(TextLayout::default()))
-            } else {
-                d.append(logforth::append::Stderr::default().with_layout(TextLayout::default()))
-            }
-        })
-        .apply();
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::filter::EnvFilter::builder()
+                .with_default_directive(LevelFilter::INFO.into())
+                .from_env_lossy(),
+        )
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_level(true)
+                .with_thread_names(true)
+                .with_writer(std::io::stdout)
+                .json(),
+        )
+        .with(otel_logger.as_ref().map(|otel| {
+            let filter_otel = EnvFilter::new("info")
+                .add_directive("hyper=off".parse().unwrap())
+                .add_directive("opentelemetry=off".parse().unwrap())
+                .add_directive("tonic=off".parse().unwrap())
+                .add_directive("h2=off".parse().unwrap())
+                .add_directive("reqwest=off".parse().unwrap());
 
-    #[cfg(feature = "tracing")]
-    if config.open_telemetry.traces {
-        init_tracing_reporter(config.as_ref())?;
-    }
+            OpenTelemetryTracingBridge::new(otel).with_filter(filter_otel)
+        }))
+        .with(
+            otel_traces
+                .as_ref()
+                .map(|otel| OpenTelemetryLayer::new(otel.tracer("tracing-otel-subscriber"))),
+        );
 
-    log::info!("Welcome to Nailpit!");
-    log::info!(configuration:? = config; "Loaded configuration");
+    tracing::info!("Welcome to Nailpit!");
+    tracing::info!(configuration = ?config, "Loaded configuration");
 
-    Ok(())
+    Ok((otel_logger, otel_traces))
 }

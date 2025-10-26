@@ -62,7 +62,6 @@ pub fn static_content<'a>(text: &'a str) -> impl Iterator<Item = &'a u8> + 'a {
         .flat_map(|bytes| b"<p>".iter().chain(bytes).chain(b"</p>\n"))
 }
 
-#[cfg_attr(feature = "tracing", fastrace::trace(enter_on_poll = true))]
 pub async fn initial_content(
     buf_mut: BytesMut,
     interner: Arc<Interner>,
@@ -87,7 +86,6 @@ pub async fn initial_content(
         .freeze()
 }
 
-#[cfg_attr(feature = "tracing", fastrace::trace(enter_on_poll = true))]
 pub async fn main_content(
     mut buffer: BytesMut,
     interner: Arc<Interner>,
@@ -129,7 +127,6 @@ pub async fn main_content(
     }
 }
 
-#[cfg_attr(feature = "tracing", fastrace::trace)]
 #[inline]
 pub fn extra(buf_mut: &mut BytesMut, config: &NailConfig, rng: &mut FastRng) -> usize {
     let mut written = 0;
@@ -147,7 +144,6 @@ pub fn extra(buf_mut: &mut BytesMut, config: &NailConfig, rng: &mut FastRng) -> 
     written
 }
 
-#[cfg_attr(feature = "tracing", fastrace::trace)]
 pub async fn footer(
     mut buf_mut: BytesMut,
     interner: Arc<Interner>,

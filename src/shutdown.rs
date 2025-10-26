@@ -8,7 +8,7 @@ use tokio::{
 };
 
 pub async fn shutdown_task(notifier: Receiver<()>) -> Result<()> {
-    log::info!("Listening for shutdown signals");
+    tracing::info!("Listening for shutdown signals");
 
     let sigterm = async {
         signal::unix::signal(signal::unix::SignalKind::terminate())?
@@ -20,7 +20,7 @@ pub async fn shutdown_task(notifier: Receiver<()>) -> Result<()> {
 
     (signal::ctrl_c(), sigterm).race().await?;
 
-    log::info!("Shutdown signal received, finishing...");
+    tracing::info!("Shutdown signal received, finishing...");
 
     drop(notifier);
 

@@ -11,7 +11,6 @@ rust-version.workspace = true
 workspace = true
 
 [features]
-tracing = ["dep:fastrace"]
 
 [dependencies]
 nailkov = { path = "../nailkov" }
@@ -19,13 +18,12 @@ nailconfig = { path = "../nailconfig" }
 nailrng = { path = "../nailrng" }
 nailbox = { path = "../nailbox" }
 color-eyre.workspace = true
-fastrace = { workspace = true, optional = true }
 pin-project-lite.workspace = true
 futures-lite.workspace = true
 axum.workspace = true
 rand.workspace = true
 bytes.workspace = true
-log.workspace = true
+tracing.workspace = true
 tokio.workspace = true
 tokio-stream.workspace = true
 winnow.workspace = true

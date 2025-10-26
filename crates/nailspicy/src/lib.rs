@@ -70,7 +70,7 @@ pub fn get_spicy_payload(config: &NailConfig) -> Option<Arc<SpicyPayloads>> {
                     Ok((
                         kind,
                         std::fs::read(file)
-                            .inspect_err(|err| log::error!("Failed to load spicy payload: {err}"))
+                            .inspect_err(|err| tracing::error!("Failed to load spicy payload: {err}"))
                             .map(Bytes::from)?,
                     ))
                 })

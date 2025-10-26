@@ -13,7 +13,7 @@ nailbox = { path = "../nailbox" }
 hyper.workspace = true
 rapidhash.workspace = true
 hashbrown.workspace = true
-log.workspace = true
+tracing.workspace = true
 
 [lints]
 workspace = true
