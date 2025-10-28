@@ -21,6 +21,7 @@ ARG TARGETPLATFORM
 RUN if   [ "$TARGETPLATFORM" == "linux/amd64"  ]; then echo "x86_64-unknown-linux-musl"      >/.target; \
     elif [ "$TARGETPLATFORM" == "linux/arm64"  ]; then echo "aarch64-unknown-linux-musl"     >/.target; \
     elif [ "$TARGETPLATFORM" == "linux/arm/v7" ]; then echo "armv7-unknown-linux-musleabihf" >/.target; \
+    elif [ "$TARGETPLATFORM" == "linux/riscv64" ]; then echo "riscv64gc-unknown-linux-musl" >/.target; \
     else echo "Unknown architecture $TARGETPLATFORM"; exit 1; \
     fi
 RUN rustup target add "$(cat /.target)"
