@@ -107,6 +107,8 @@ pub struct OpenTelemetryConfig {
 }
 
 pub fn get_configuration() -> Result<Arc<NailConfig>> {
+    let socket_addr = std::env::var("NAILPIT_SOCKET").ok();
+
     let config_dir = std::env::current_dir()?.join("configuration");
 
     let config = config::Config::builder()
@@ -119,6 +121,7 @@ pub fn get_configuration() -> Result<Arc<NailConfig>> {
                 .required(false)
                 .format(config::FileFormat::Toml),
         )
+        .set_override_option("server.socket_addr", socket_addr)?
         .build()?;
 
     let config = try_arc_within(|| config.try_deserialize())?;
