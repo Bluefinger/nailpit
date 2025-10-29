@@ -33,7 +33,7 @@ max_paragraph_size = 256
 
 # Maximum amount of links to be rendered in the footer to allow crawlers go deeper into the tarpit.
 # Acts as a form of staggering concurrency, so crawlers don't immediately open hundreds of connections.
-max_pit_links = 4
+max_pit_links = 5
 
 # Maximum amount of characters in generated headers.
 header_size = 32
@@ -98,5 +98,4 @@ service_name = "nailpit"
 logs = false
 # Enable collecting trace data to OTEL collector. This option imposes a significant overhead, so only
 # enable it if you have the capacity for storing the data, which can be a lot during heavy traffic.
-# This option is only available to binaries compiled with tracing support.
 traces = false
