@@ -8,7 +8,25 @@ Nailpit is intended to not be exposed to the public, only to bots/scrapers. Any 
 
 ## How to use / deploy
 
-TBA/WIP
+By default, `nailpit` won't work unless you provide at least *some* input data. In the directory you are running `nailpit` from, create an `input` directory and add a `.txt` file inside of it. Name it anything, whatever, like `first.txt`. In this file, add in content/text, the more the better, as this will train the markov chain on what to generate. So for example, add many paragraphs of lorem ipsum text to the file just to see it work. Once you have at least *one* txt input, `nailpit` will be able to run. Multiple `.txt` files will act as different markov chains, each one outputting differently structured text to the other, and each time a generated page is requested, these chains are selected at random to produce content for that request. So if you want more varied/randomised content, you want not just very large text files of pure text/content, but also many different files. Do keep in mind that the more content and files you use, the bigger the memory usage of the application, though this is kept in check with some memory optimisation techniques.
+
+The input text files should be pure text. It should not be html or markdown or any other format, just text.
+
+### Docker
+
+The easiest way to run `nailpit` is to run it in a docker container. This makes it fairly easy to deploy and ensures its running environment is consistent. This does add *a bit more* overhead, but realistically, not enough to really matter.
+
+If building the image directly from this repo, just use `docker build . -t nailpit`, or if cross-compiling to a different platform like a Raspberry Pi 5, run `docker build --platform=linux/arm64 .`. `nailpit` docker image supports `linux/amd64`, `linux/arm64`, `linux/arm/v7` and `linux/riscv64` platforms. Running the image then becomes the following (with two volumes provided for user overrides):
+
+```
+docker run -v ./configuration/:/app/configuration -v ./input/:/app/input -p 3001:3001/tcp nailpit:latest
+```
+
+The socket `nailpit` listens to can be overridden with `-e NAILPIT_SOCKET=0.0.0.0:3001`, and it expects the full ip:port string. There's three volumes to be configured, one for `/app/configuration` which is where the default config file lives and will be where your override config file will live, one for `/app/input` which is where the user's input files are located, and the last `/app/templates` for user provided template overrides.
+
+### Configuration
+
+All of the configuration options are documented in the default config file found [here](./configuration/pit.default.toml). To create your own configuration, create a `pit.toml` file in the configuration folder and add just the configuration options you want to override.
 
 ## How to contribute
 
