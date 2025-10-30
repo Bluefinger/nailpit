@@ -6,6 +6,10 @@ Send Malicious Scrapers into an equally malicious tarpit with added rusty nails.
 
 Nailpit is intended to not be exposed to the public, only to bots/scrapers. Any link into the tarpit should be hidden to users, and the initial entry point for Nailpit is a disclaimer as well. This project is not responsible for misconfigured deployments or consequences relating to that. You are responsible for ensuring this is deployed correctly and employed against only agents that are ignoring widely used and accepted web standards such as `robots.txt`.
 
+## Minimum CPU Support
+
+For x86_64/amd64 processors, processors that at least qualify for x86-64-v3 level (so supporting AVX2), and for aarch64, processors from the A53 onwards (with NEON support, so Raspberry PI 3 B+). armv7 and RISCV64 are compiled without instruction optimisations.
+
 ## How to use / deploy
 
 By default, `nailpit` won't work unless you provide at least *some* input data. In the directory you are running `nailpit` from, create an `input` directory and add a `.txt` file inside of it. Name it anything, whatever, like `first.txt`. In this file, add in content/text, the more the better, as this will train the markov chain on what to generate. So for example, add many paragraphs of lorem ipsum text to the file just to see it work. Once you have at least *one* txt input, `nailpit` will be able to run. Multiple `.txt` files will act as different markov chains, each one outputting differently structured text to the other, and each time a generated page is requested, these chains are selected at random to produce content for that request. So if you want more varied/randomised content, you want not just very large text files of pure text/content, but also many different files. Do keep in mind that the more content and files you use, the bigger the memory usage of the application, though this is kept in check with some memory optimisation techniques.

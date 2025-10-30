@@ -64,7 +64,13 @@ opentelemetry-otlp = { version = "0.31.0", default-features = false, features = 
     "grpc-tonic",
     "zstd-tonic",
 ] }
-opentelemetry_sdk = { version = "0.31.0", default-features = false, features = ["trace", "logs"] }
+opentelemetry_sdk = { version = "0.31.0", default-features = false, features = [
+    "trace",
+    "logs",
+    "rt-tokio-current-thread",
+    "experimental_logs_batch_log_processor_with_async_runtime",
+    "experimental_trace_batch_span_processor_with_async_runtime"
+] }
 opentelemetry-semantic-conventions = "0.31"
 winnow = { version = "0.7.6", features = ["simd"] }
 
@@ -89,7 +95,7 @@ name = "nailpit"
 
 [features]
 default = ["mimalloc"]
-mimalloc = ["dep:mimalloc-safe"]
+mimalloc = ["dep:mimalloc"]
 detailed_traces = ["nailgen/detailed_traces", "nailrater/detailed_traces"]
 
 [dependencies]
@@ -113,7 +119,7 @@ tracing.workspace = true
 color-eyre.workspace = true
 futures-concurrency = "7.6.3"
 glob = "0.3.2"
-mimalloc-safe = { version = "0.1.50", optional = true }
+mimalloc = { version = "0.1.48", features = ["v3"], optional = true }
 core_affinity = "0.8.3"
 
 [profile.release]

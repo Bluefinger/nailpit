@@ -10,9 +10,16 @@ use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
 use opentelemetry_otlp::{LogExporter, Protocol, SpanExporter, WithExportConfig, WithTonicConfig};
 use opentelemetry_sdk::{
     Resource,
-    logs::SdkLoggerProvider,
+    logs::{
+        BatchConfig as BatchLogConfig, SdkLoggerProvider,
+        log_processor_with_async_runtime::BatchLogProcessor,
+    },
     propagation::{BaggagePropagator, TraceContextPropagator},
-    trace::{RandomIdGenerator, Sampler, SdkTracerProvider},
+    runtime::TokioCurrentThread,
+    trace::{
+        BatchConfig as BatchTraceConfig, RandomIdGenerator, Sampler, SdkTracerProvider,
+        span_processor_with_async_runtime::BatchSpanProcessor,
+    },
 };
 use opentelemetry_semantic_conventions::{SCHEMA_URL, resource::SERVICE_VERSION};
 use tracing::level_filters::LevelFilter;
@@ -45,7 +52,11 @@ pub fn init_logging_reporter(config: &NailConfig) -> Result<SdkLoggerProvider> {
         .build()?;
 
     Ok(SdkLoggerProvider::builder()
-        .with_batch_exporter(log_exporter)
+        .with_log_processor(
+            BatchLogProcessor::builder(log_exporter, TokioCurrentThread)
+                .with_batch_config(BatchLogConfig::default())
+                .build(),
+        )
         .with_resource(resource(config))
         .build())
 }
@@ -69,7 +80,11 @@ pub fn init_tracing_reporter(config: &NailConfig) -> Result<SdkTracerProvider> {
         .build()?;
 
     let provider = SdkTracerProvider::builder()
-        .with_batch_exporter(trace_exporter)
+        .with_span_processor(
+            BatchSpanProcessor::builder(trace_exporter, TokioCurrentThread)
+                .with_batch_config(BatchTraceConfig::default())
+                .build(),
+        )
         .with_sampler(Sampler::ParentBased(Box::new(Sampler::TraceIdRatioBased(
             1.0,
         ))))
