@@ -66,9 +66,6 @@ where
         rt.block_on(async {
             let _guard = nailotel::init_telemetry(app.config.clone())?;
 
-            tracing::info!(message = "Welcome to Nailpit!");
-            tracing::info!(configuration = ?app.config, message = "Loaded configuration");
-
             let handle = tokio::spawn(crate::shutdown::shutdown_task(shutdown_signal));
 
             // If we hit an application error case, restart the worker.
