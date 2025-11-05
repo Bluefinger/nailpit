@@ -15,8 +15,7 @@ use tracing::Span;
 /// # Usage
 /// ```rust
 /// use actix_web::get;
-/// use tracing_actix_web::RootSpan;
-/// use uuid::Uuid;
+/// use nailtrace::root_span::RootSpan;
 ///
 /// #[get("/")]
 /// async fn index(root_span: RootSpan) -> String {

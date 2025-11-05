@@ -11,7 +11,7 @@ use uuid::Uuid;
 /// # Usage
 /// ```rust
 /// use actix_web::get;
-/// use tracing_actix_web::RequestId;
+/// use nailrequest::RequestId;
 /// use uuid::Uuid;
 ///
 /// #[get("/")]

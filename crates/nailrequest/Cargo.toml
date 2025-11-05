@@ -12,5 +12,8 @@ actix-web.workspace = true
 tracing.workspace = true
 uuid = { version = "1.18", features = ["v7", "fast-rng"] }
 
+[dev-dependencies]
+actix-web = { workspace = true, features = ["macros"] }
+
 [lints]
 workspace = true

@@ -30,59 +30,13 @@ pub enum BuilderKind {
 ///
 /// `TracingLogger` is designed as a drop-in replacement of [`actix-web`]'s [`Logger`].
 ///
-/// # Usage
-///
-/// Register `TracingLogger` as a middleware for your application using `.wrap` on `App`.  
-/// In this example we add a [`tracing::Subscriber`] to output structured logs to the console.
-///
-/// ```rust
-/// use actix_web::App;
-/// use tracing::{Subscriber, subscriber::set_global_default};
-/// use tracing_actix_web::TracingLogger;
-/// use tracing_log::LogTracer;
-/// use tracing_bunyan_formatter::{BunyanFormattingLayer, JsonStorageLayer};
-/// use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Registry};
-///
-/// /// Compose multiple layers into a `tracing`'s subscriber.
-/// pub fn get_subscriber(
-///     name: String,
-///     env_filter: String
-/// ) -> impl Subscriber + Send + Sync {
-///     let env_filter = EnvFilter::try_from_default_env()
-///         .unwrap_or(EnvFilter::new(env_filter));
-///     let formatting_layer = BunyanFormattingLayer::new(
-///         name.into(),
-///         std::io::stdout
-///     );
-///     Registry::default()
-///         .with(env_filter)
-///         .with(JsonStorageLayer)
-///         .with(formatting_layer)
-/// }
-///
-/// /// Register a subscriber as global default to process span data.
-/// ///
-/// /// It should only be called once!
-/// pub fn init_subscriber(subscriber: impl Subscriber + Send + Sync) {
-///     LogTracer::init().expect("Failed to set logger");
-///     set_global_default(subscriber).expect("Failed to set subscriber");
-/// }
-///
-/// fn main() {
-///     let subscriber = get_subscriber("app".into(), "info".into());
-///     init_subscriber(subscriber);
-///
-///     let app = App::new().wrap(TracingLogger::default());
-/// }
-/// ```
-///
 /// Like [`actix-web`]'s [`Logger`], in order to use `TracingLogger` inside a Scope, Resource, or
 /// Condition, the [`Compat`] middleware must be used.
 ///
 /// ```rust
 /// use actix_web::middleware::Compat;
 /// use actix_web::{web, App};
-/// use tracing_actix_web::TracingLogger;
+/// use nailtrace::middleware::TracingLogger;
 ///
 /// let app = App::new()
 ///     .service(
