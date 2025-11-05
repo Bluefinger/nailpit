@@ -8,18 +8,8 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-nailfv = { path = "../nailfv" }
 nailconfig = { path = "../nailconfig" }
-nailnet = { path = "../nailnet" }
-axum.workspace = true
-futures-lite.workspace = true
-hyper.workspace = true
-pin-project-lite.workspace = true
-scc.workspace = true
-tokio.workspace = true
-wyrand.workspace = true
-tower.workspace = true
-tracing.workspace = true
+actix-web.workspace = true
 
 [lints]
 workspace = true

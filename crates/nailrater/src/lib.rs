@@ -1,17 +1,22 @@
-mod futures;
 mod modes;
 
+use core::future::{Ready, ready};
 use std::{
-    net::IpAddr,
     sync::Arc,
     time::{Duration, Instant},
 };
 
-use axum::{body::Body, extract::Request, response::Response};
-use futures::NailedResponseFuture;
-use futures_lite::future::Boxed;
+use actix_web::{
+    Error, HttpMessage, HttpResponse,
+    dev::{Service, ServiceRequest, ServiceResponse, Transform},
+    http::header::{CONTENT_ENCODING, ContentType, HeaderMap},
+    mime,
+};
+use futures_lite::{
+    FutureExt,
+    future::{Boxed, BoxedLocal},
+};
 
-use hyper::HeaderMap;
 use modes::LimitModes;
 use nailbox::boxed_future_within;
 use nailconfig::RateLimitingConfig;
@@ -21,6 +26,7 @@ use parking_lot::Mutex;
 use rapidhash::quality::RandomState;
 use scc::HashMap;
 use tokio::time::sleep;
+use tracing::instrument;
 use tracing_futures::{Instrument, Instrumented};
 
 const PEER_TIMEOUT: Duration = Duration::from_secs(60 * 2);
@@ -88,17 +94,33 @@ impl NailRaterLayer {
     }
 }
 
-impl<S> tower::Layer<S> for NailRaterLayer {
-    type Service = NailRater<S>;
+impl<S> Transform<S, ServiceRequest> for NailRaterLayer
+where
+    S: Service<ServiceRequest, Response = ServiceResponse, Error = Error>,
+    S::Future: 'static,
+{
+    type Response = ServiceResponse;
 
-    fn layer(&self, inner: S) -> Self::Service {
-        NailRater::new(&self.config, self.spicy_payload.clone(), inner)
+    type Error = Error;
+
+    type Transform = NailRater<S>;
+
+    type InitError = ();
+
+    type Future = Ready<Result<Self::Transform, Self::InitError>>;
+
+    fn new_transform(&self, service: S) -> Self::Future {
+        ready(Ok(NailRater::new(
+            &self.config,
+            self.spicy_payload.clone(),
+            service,
+        )))
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct NailRater<S> {
-    peers: Arc<HashMap<IpAddr, Peer, RandomState>>,
+    peers: Arc<HashMap<IdentifiedPeer, Peer, RandomState>>,
     mode: LimitModes,
     spicy_payload: Option<Arc<SpicyPayloads>>,
     inner: S,
@@ -125,7 +147,7 @@ impl<S> NailRater<S> {
     )]
     fn track_visiting_peer(
         &self,
-        proxied: IpAddr,
+        proxied: IdentifiedPeer,
         headers: &HeaderMap,
     ) -> (PeerState, Option<SpicyPayloadKind>) {
         let peer = self
@@ -151,7 +173,7 @@ impl<S> NailRater<S> {
         feature = "detailed_traces",
         tracing::instrument(name = "prune_old_peers", level = "trace", skip_all)
     )]
-    fn prune(peers: Arc<HashMap<IpAddr, Peer, RandomState>>) -> Boxed<()> {
+    fn prune(peers: Arc<HashMap<IdentifiedPeer, Peer, RandomState>>) -> Boxed<()> {
         boxed_future_within(async move || {
             tracing::trace!("PRUNING STARTED");
 
@@ -162,53 +184,83 @@ impl<S> NailRater<S> {
     }
 }
 
-impl<S, ReqBody> tower::Service<Request<ReqBody>> for NailRater<S>
+impl<S> Service<ServiceRequest> for NailRater<S>
 where
-    S: tower::Service<Request<ReqBody>, Response = Response<Body>> + Send + 'static,
-    S::Future: Send + 'static,
+    S: Service<ServiceRequest, Response = ServiceResponse, Error = Error>,
+    S::Future: 'static,
 {
-    type Response = S::Response;
-    type Error = S::Error;
-    type Future = Instrumented<NailedResponseFuture<S::Future>>;
+    type Response = ServiceResponse;
 
-    fn poll_ready(
-        &mut self,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), Self::Error>> {
-        self.inner.poll_ready(cx)
-    }
+    type Error = Error;
 
-    #[tracing::instrument(name = "rate_limiter", skip_all)]
-    fn call(&mut self, req: Request<ReqBody>) -> Self::Future {
-        let Some(proxied) = req.extensions().get::<IdentifiedPeer>() else {
-            return NailedResponseFuture::error().in_current_span();
+    type Future = Instrumented<BoxedLocal<Result<Self::Response, Self::Error>>>;
+
+    actix_web::dev::forward_ready!(inner);
+
+    #[instrument(name = "rate limiter", skip_all)]
+    fn call(&self, req: ServiceRequest) -> Self::Future {
+        let Some(proxied) = req.extensions().get::<IdentifiedPeer>().cloned() else {
+            return ready(Ok(
+                req.into_response(HttpResponse::InternalServerError().finish())
+            ))
+            .boxed_local()
+            .in_current_span();
         };
 
-        let (peer_state, supports_spicy) = self.track_visiting_peer(proxied.ip(), req.headers());
+        let (peer_state, supports_spicy) = self.track_visiting_peer(proxied, req.headers());
 
         let delay = match peer_state {
             PeerState::Ready => None,
-            PeerState::Delay(delay) => Some(boxed_future_within(|| sleep(delay))),
-            PeerState::SpicyDrop => {
-                return self
-                    .spicy_payload
-                    .as_deref()
-                    .zip(supports_spicy)
-                    .and_then(|(payloads, kind)| {
-                        payloads.get(&kind).map(|payload| (payload.clone(), kind))
-                    })
-                    .map_or_else(NailedResponseFuture::dropped, |(payload, kind)| {
-                        NailedResponseFuture::spicy(payload, kind)
-                    })
-                    .in_current_span();
+            PeerState::Delay(duration) => Some(Box::pin(sleep(duration))),
+            PeerState::Drop => {
+                return ready(Ok(
+                    req.into_response(HttpResponse::TooManyRequests().finish())
+                ))
+                .boxed_local()
+                .in_current_span();
             }
-            _ => return NailedResponseFuture::dropped().in_current_span(),
+            PeerState::SpicyDrop => {
+                if let Some((payload, kind)) =
+                    self.spicy_payload.as_deref().zip(supports_spicy).and_then(
+                        |(payloads, kind)| {
+                            payloads.get(&kind).map(|payload| (payload.clone(), kind))
+                        },
+                    )
+                {
+                    return ready(Ok(req.into_response(
+                        HttpResponse::TooManyRequests()
+                            .insert_header(ContentType(mime::TEXT_HTML_UTF_8))
+                            .insert_header((CONTENT_ENCODING, kind.as_str()))
+                            .body(payload),
+                    )))
+                    .boxed_local()
+                    .in_current_span();
+                } else {
+                    return ready(Ok(
+                        req.into_response(HttpResponse::TooManyRequests().finish())
+                    ))
+                    .boxed_local()
+                    .in_current_span();
+                }
+            }
         };
 
         let prune = PRUNING_SCHEDULER.schedule(|| Self::prune(self.peers.clone()));
 
         let inner = self.inner.call(req);
 
-        NailedResponseFuture::normal(prune, delay, inner).in_current_span()
+        async move {
+            if let Some(prune) = prune {
+                prune.await;
+            }
+
+            if let Some(delay) = delay {
+                delay.await;
+            }
+
+            inner.await
+        }
+        .boxed_local()
+        .in_current_span()
     }
 }

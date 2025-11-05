@@ -1,7 +1,7 @@
 //! Crate for defining a HTML generator based on a markov chain source, using a string
 //! interner to reduce memory usage both within a markov chain and across multiple chains.
 
-use core::task::Poll;
+use core::{convert::Infallible, task::Poll};
 use std::{
     path::Path,
     pin::Pin,
@@ -9,7 +9,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-use axum::extract::MatchedPath;
 use bytes::{Bytes, BytesMut};
 use color_eyre::Result;
 use futures_lite::Stream;
@@ -56,7 +55,7 @@ pin_project! {
 
 pin_project! {
     pub struct MarkovStream {
-        path: MatchedPath,
+        path: String,
         config: Arc<NailConfig>,
         interner: Arc<Interner>,
         markov: MarkovGen,
@@ -74,7 +73,7 @@ pin_project! {
 impl MarkovStream {
     pub fn new(
         markov: MarkovGen,
-        path: MatchedPath,
+        path: String,
         config: Arc<NailConfig>,
         interner: Arc<Interner>,
         template: Template,
@@ -97,7 +96,7 @@ impl MarkovStream {
 }
 
 impl Stream for MarkovStream {
-    type Item = Bytes;
+    type Item = Result<Bytes, Infallible>;
 
     #[cfg_attr(
         feature = "detailed_traces",
@@ -212,7 +211,8 @@ impl Stream for MarkovStream {
                             );
 
                             this.state.set(GeneratorState::Finished);
-                            continue 'outer;
+
+                            return Poll::Ready(Some(Ok(buffer.freeze())));
                         }
                     }
                 },
@@ -261,7 +261,7 @@ impl Stream for MarkovStream {
                             this.state.set(GeneratorState::Template);
                         }
 
-                        return Poll::Ready(Some(content));
+                        return Poll::Ready(Some(Ok(content)));
                     }
                     Poll::Pending => return Poll::Pending,
                 },
@@ -292,7 +292,7 @@ impl MarkovGen {
     #[inline]
     pub fn into_stream(
         self,
-        path: MatchedPath,
+        path: String,
         config: Arc<NailConfig>,
         interner: Arc<Interner>,
         template: Template,

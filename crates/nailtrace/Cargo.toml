@@ -7,15 +7,17 @@ version.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+[features]
+emit_event_on_error = []
+
 [dependencies]
 nailip = { path = "../nailip" }
 nailstate = { path = "../nailstate" }
-axum = { workspace = true, features = ["matched-path"] }
+nailrequest = { path = "../nailrequest" }
+actix-web.workspace = true
 tracing.workspace = true
 tracing-opentelemetry.workspace = true
 tracing-futures.workspace = true
-hyper.workspace = true
-tower-http.workspace = true
 pin-project-lite.workspace = true
 opentelemetry.workspace = true
 opentelemetry-http.workspace = true

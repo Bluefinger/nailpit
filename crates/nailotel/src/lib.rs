@@ -28,6 +28,18 @@ use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt, util::Subscribe
 
 static RESOURCE: OnceLock<Resource> = OnceLock::new();
 
+pub struct OtelGuard {
+    otel_logger: Option<SdkLoggerProvider>,
+    otel_traces: Option<SdkTracerProvider>,
+}
+
+impl OtelGuard {
+    pub fn shutdown(self) {
+        self.otel_logger.map(|logs_provider| logs_provider.shutdown());
+        self.otel_traces.map(|trace_provider| trace_provider.shutdown());
+    }
+}
+
 fn resource(config: &NailConfig) -> Resource {
     RESOURCE
         .get_or_init(|| {
@@ -97,7 +109,7 @@ pub fn init_tracing_reporter(config: &NailConfig) -> Result<SdkTracerProvider> {
 
 pub fn init_telemetry(
     config: Arc<nailconfig::NailConfig>,
-) -> Result<(Option<SdkLoggerProvider>, Option<SdkTracerProvider>)> {
+) -> Result<OtelGuard> {
     let otel_logger = if config.open_telemetry.logs {
         Some(init_logging_reporter(config.as_ref())?)
     } else {
@@ -120,6 +132,9 @@ pub fn init_telemetry(
                 .add_directive("tonic=off".parse().unwrap())
                 .add_directive("tower=off".parse().unwrap())
                 .add_directive("h2=off".parse().unwrap())
+                .add_directive("mio=off".parse().unwrap())
+                .add_directive("actix_http=off".parse().unwrap())
+                .add_directive("actix_server=off".parse().unwrap())
                 .add_directive("reqwest=off".parse().unwrap()),
         )
         .with(
@@ -136,6 +151,9 @@ pub fn init_telemetry(
                 .add_directive("tonic=off".parse().unwrap())
                 .add_directive("tower=off".parse().unwrap())
                 .add_directive("h2=off".parse().unwrap())
+                .add_directive("mio=off".parse().unwrap())
+                .add_directive("actix_http=off".parse().unwrap())
+                .add_directive("actix_server=off".parse().unwrap())
                 .add_directive("reqwest=off".parse().unwrap());
 
             OpenTelemetryTracingBridge::new(otel).with_filter(filter_otel)
@@ -148,5 +166,5 @@ pub fn init_telemetry(
     tracing::info!("Welcome to Nailpit!");
     tracing::info!(configuration = ?config, "Loaded configuration");
 
-    Ok((otel_logger, otel_traces))
+    Ok(OtelGuard { otel_logger, otel_traces })
 }

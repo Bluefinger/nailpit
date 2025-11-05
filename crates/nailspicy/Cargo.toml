@@ -10,7 +10,7 @@ rust-version.workspace = true
 [dependencies]
 nailconfig = { path = "../nailconfig" }
 nailbox = { path = "../nailbox" }
-hyper.workspace = true
+actix-web.workspace = true
 rapidhash.workspace = true
 hashbrown.workspace = true
 tracing.workspace = true
