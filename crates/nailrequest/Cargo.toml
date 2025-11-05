@@ -1,5 +1,5 @@
 [package]
-name = "nailnet"
+name = "nailrequest"
 authors.workspace = true
 edition.workspace = true
 repository.workspace = true
@@ -8,9 +8,12 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-socket2 = "0.6.0"
-color-eyre.workspace = true
-tokio.workspace = true
+actix-web.workspace = true
+tracing.workspace = true
+uuid = { version = "1.18", features = ["v7", "fast-rng"] }
+
+[dev-dependencies]
+actix-web = { workspace = true, features = ["macros"] }
 
 [lints]
 workspace = true

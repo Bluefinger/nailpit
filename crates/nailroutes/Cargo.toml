@@ -13,15 +13,11 @@ nailgen = { path = "../nailgen" }
 nailip = { path = "../nailip" }
 nailrater = { path = "../nailrater" }
 nailstate = { path = "../nailstate" }
-nailstream = { path = "../nailstream" }
 nailspicy = { path = "../nailspicy" }
 nailrng = { path = "../nailrng" }
-axum = { workspace = true, features = ["original-uri"] }
-hyper.workspace = true
 tracing.workspace = true
 tracing-futures.workspace = true
-tower.workspace = true
-tower-http.workspace = true
+actix-web.workspace = true
 
 [lints]
 workspace = true

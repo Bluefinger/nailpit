@@ -1,88 +1,65 @@
-use core::time::Duration;
+use core::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use color_eyre::eyre::OptionExt;
+use actix_web::HttpResponse;
+use color_eyre::eyre::Ok;
+use nailspicy::SpicyPayloads;
+use nailstate::ServerState;
 
-use crate::app::App;
+pub fn run(state: ServerState, spicy: Option<Arc<SpicyPayloads>>) -> color_eyre::Result<()> {
+    let workers = std::thread::available_parallelism()?.min(state.config.server.worker_threads);
 
-pub fn start<Fut, F>(app: App, main_fn: F) -> color_eyre::Result<()>
-where
-    Fut: Future<Output = color_eyre::Result<()>>,
-    F: Fn(App, Arc<tokio::sync::watch::Sender<()>>) -> Fut + Clone + Sync + Send,
-{
-    let workers = std::thread::available_parallelism()?.min(app.config.server.worker_threads);
+    // Gets info for core ids if it can, else returns an empty Vec
+    let core_ids = core_affinity::get_core_ids().unwrap_or_default();
 
-    let (shutdown_notifier, shutdown_signal) = tokio::sync::watch::channel(());
+    let next_core_id = Arc::new(AtomicUsize::new(0));
 
-    let shutdown_notifier = Arc::new(shutdown_notifier);
+    actix_web::rt::System::new().block_on(async move {
+        let guard = nailotel::init_telemetry(state.config.clone_inner())?;
 
-    let mut core_ids = core_affinity::get_core_ids().ok_or_eyre("Failed to get CPU affinity")?;
+        let socket = state.config.server.socket_addr.clone();
 
-    let worker_cores = core_ids.split_off(1);
+        tracing::info!(
+            "{} listening on {}",
+            &state.config.open_telemetry.service_name,
+            &socket
+        );
 
-    core_affinity::set_for_current(core_ids[0]);
+        actix_web::HttpServer::new(move || {
+            let pin = Arc::clone(&next_core_id).fetch_add(1, Ordering::AcqRel);
 
-    // Main worker MUST start, else we just error out.
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()?;
+            // Accesses the Core Id if available and sets current thread to be pinned to that core,
+            // else it just does nothing.
+            core_ids
+                .get(pin)
+                .copied()
+                .map(core_affinity::set_for_current);
 
-    std::thread::scope(|s| {
-        for (num, core_id) in (1..workers.get()).zip(worker_cores) {
-            let cloned = &main_fn;
-            let app = &app;
-            let shutdown_notifier = &shutdown_notifier;
+            let app = actix_web::App::new().app_data(actix_web::web::ThinData(state.clone()));
 
-            // If any worker threads fail to be created, the program will terminate. If the
-            // runtime within the worker thread fails to be created, this won't terminate the
-            // program, but the error will get logged.
-            std::thread::Builder::new()
-                .name(format!("worker {num}"))
-                .spawn_scoped(s, move || {
-                    core_affinity::set_for_current(core_id);
+            let app = if let Some(spicy) = &spicy {
+                app.app_data(actix_web::web::Data::from(spicy.clone()))
+            } else {
+                app
+            };
 
-                    match tokio::runtime::Builder::new_current_thread()
-                        .enable_all()
-                        .build()
-                    {
-                        Ok(rt) => {
-                            // If we hit an application error case, restart the worker
-                            while let Err(e) =
-                                rt.block_on(cloned(app.clone(), shutdown_notifier.clone()))
-                            {
-                                tracing::error!(error = %e, worker = num, "Failed to start");
-                                // Wait a moment before trying again
-                                std::thread::sleep(Duration::from_secs(1));
-                                tracing::info!(worker = num, "Restarting Worker...");
-                            }
-
-                            rt.shutdown_timeout(Duration::from_secs(60));
-                        }
-                        Err(e) => tracing::error!(error = %e, worker = num, "Failed to start"),
-                    }
-                })?;
-        }
-
-        rt.block_on(async {
-            let _guard = nailotel::init_telemetry(app.config.clone())?;
-
-            let handle = tokio::spawn(crate::shutdown::shutdown_task(shutdown_signal));
-
-            // If we hit an application error case, restart the worker.
-            while let Err(e) = main_fn(app.clone(), shutdown_notifier.clone()).await {
-                tracing::error!(error = %e, worker = 0, "Failed to start");
-                // Wait a moment before trying again
-                tokio::time::sleep(Duration::from_secs(1)).await;
-                tracing::info!(worker = 0, "Restarting Worker...");
-            }
-
-            tracing::info!("Waiting for background tasks to complete...");
-
-            handle.await?
+            app.wrap(actix_web::middleware::Compress::default())
+                .wrap(actix_web::middleware::NormalizePath::trim())
+                .configure(|cfg| nailroutes::nail_web_app_config(&state.config, &spicy, cfg))
+                .route(
+                    "/health",
+                    actix_web::web::get().to(async || HttpResponse::NoContent().finish()),
+                )
         })
-    })?;
+        .workers(workers.get())
+        .bind(socket)?
+        .run()
+        .await?;
 
-    rt.shutdown_timeout(Duration::from_secs(60));
+        actix_web::web::block(|| guard.shutdown()).await?;
+
+        Ok(())
+    })?;
 
     Ok(())
 }
