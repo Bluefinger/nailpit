@@ -1,3 +1,4 @@
+mod future;
 mod modes;
 
 use core::future::{Ready, ready};
@@ -7,15 +8,11 @@ use std::{
 };
 
 use actix_web::{
-    Error, HttpMessage, HttpResponse,
+    Error, HttpMessage,
     dev::{Service, ServiceRequest, ServiceResponse, Transform},
-    http::header::{CONTENT_ENCODING, ContentType, HeaderMap},
-    mime,
+    http::header::HeaderMap,
 };
-use futures_lite::{
-    FutureExt,
-    future::{Boxed, BoxedLocal},
-};
+use futures_lite::future::Boxed;
 
 use modes::LimitModes;
 use nailbox::boxed_future_within;
@@ -27,7 +24,8 @@ use rapidhash::quality::RandomState;
 use scc::HashMap;
 use tokio::time::sleep;
 use tracing::instrument;
-use tracing_futures::{Instrument, Instrumented};
+
+use crate::future::NailedResponseFuture;
 
 const PEER_TIMEOUT: Duration = Duration::from_secs(60 * 2);
 
@@ -193,31 +191,23 @@ where
 
     type Error = Error;
 
-    type Future = Instrumented<BoxedLocal<Result<Self::Response, Self::Error>>>;
+    type Future = NailedResponseFuture<S::Future>;
 
     actix_web::dev::forward_ready!(inner);
 
     #[instrument(name = "rate limiter", skip_all)]
     fn call(&self, req: ServiceRequest) -> Self::Future {
         let Some(proxied) = req.extensions().get::<IdentifiedPeer>().cloned() else {
-            return ready(Ok(
-                req.into_response(HttpResponse::InternalServerError().finish())
-            ))
-            .boxed_local()
-            .in_current_span();
+            return NailedResponseFuture::error(req);
         };
 
         let (peer_state, supports_spicy) = self.track_visiting_peer(proxied, req.headers());
 
         let delay = match peer_state {
             PeerState::Ready => None,
-            PeerState::Delay(duration) => Some(Box::pin(sleep(duration))),
+            PeerState::Delay(duration) => Some(boxed_future_within(|| sleep(duration))),
             PeerState::Drop => {
-                return ready(Ok(
-                    req.into_response(HttpResponse::TooManyRequests().finish())
-                ))
-                .boxed_local()
-                .in_current_span();
+                return NailedResponseFuture::dropped(req);
             }
             PeerState::SpicyDrop => {
                 if let Some((payload, kind)) =
@@ -227,20 +217,9 @@ where
                         },
                     )
                 {
-                    return ready(Ok(req.into_response(
-                        HttpResponse::TooManyRequests()
-                            .insert_header(ContentType(mime::TEXT_HTML_UTF_8))
-                            .insert_header((CONTENT_ENCODING, kind.as_str()))
-                            .body(payload),
-                    )))
-                    .boxed_local()
-                    .in_current_span();
+                    return NailedResponseFuture::spicy(req, payload, kind);
                 } else {
-                    return ready(Ok(
-                        req.into_response(HttpResponse::TooManyRequests().finish())
-                    ))
-                    .boxed_local()
-                    .in_current_span();
+                    return NailedResponseFuture::dropped(req);
                 }
             }
         };
@@ -249,18 +228,6 @@ where
 
         let inner = self.inner.call(req);
 
-        async move {
-            if let Some(prune) = prune {
-                prune.await;
-            }
-
-            if let Some(delay) = delay {
-                delay.await;
-            }
-
-            inner.await
-        }
-        .boxed_local()
-        .in_current_span()
+        NailedResponseFuture::normal(prune, delay, inner)
     }
 }

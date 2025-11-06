@@ -68,7 +68,7 @@ pub fn nail_web_app_config(
                     spicy.clone(),
                 ))
                 .wrap(traces)
-                .route("/", actix_web::web::get().to(warning_index))
+                .route("", actix_web::web::get().to(warning_index))
                 .route("/{generated}", actix_web::web::get().to(generated_page)),
         );
     });
