@@ -1,8 +1,8 @@
 use crate::root_span;
-use actix_web::body::MessageBody;
 use actix_web::dev::{ServiceRequest, ServiceResponse};
 use actix_web::http::StatusCode;
 use actix_web::{Error, ResponseError};
+use actix_web::{body::MessageBody, http::header};
 use tracing::{Span, info_span};
 
 /// `RootSpanBuilder` allows you to customise the root span attached by
@@ -49,8 +49,22 @@ impl RootSpanBuilder for DefaultRootSpanBuilder {
                     // use the status code already constructed for the outgoing HTTP response
                     handle_error(span, response.status(), error.as_response_error());
                 } else {
-                    let code: i32 = response.response().status().as_u16().into();
-                    span.record("http.status_code", code);
+                    let res = response.response();
+                    let code: i32 = res.status().as_u16().into();
+                    let headers = res.headers();
+                    if let Some(content_type) = headers
+                        .get(header::CONTENT_TYPE)
+                        .and_then(|val| val.to_str().ok())
+                    {
+                        span.record("http.response.header.content-type", content_type);
+                    }
+                    if let Some(content_encoding) = headers
+                        .get(header::CONTENT_ENCODING)
+                        .and_then(|val| val.to_str().ok())
+                    {
+                        span.record("http.response.header.content-encoding", content_encoding);
+                    }
+                    span.record("http.response.status_code", code);
                     span.record("otel.status_code", "OK");
                 }
             }

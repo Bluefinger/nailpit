@@ -31,7 +31,7 @@ impl NailInputs {
     /// pointer to the selected chain.
     #[inline]
     pub fn get_random_input(&self, rng: &mut FastRng) -> MarkovGen {
-         match self.chains.as_ref() {
+        match self.chains.as_ref() {
             [] => {
                 panic!("There must be at least one markov chain");
             }

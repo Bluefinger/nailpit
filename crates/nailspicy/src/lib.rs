@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
-use actix_web::{http::header::{ACCEPT_ENCODING, HeaderMap}, web::Bytes};
+use actix_web::{
+    http::header::{ACCEPT_ENCODING, HeaderMap},
+    web::Bytes,
+};
 use hashbrown::HashMap;
 
 use nailbox::try_arc_within;
@@ -71,7 +74,9 @@ pub fn get_spicy_payload(config: &NailConfig) -> Option<Arc<SpicyPayloads>> {
                     Ok((
                         kind,
                         std::fs::read(file)
-                            .inspect_err(|err| tracing::error!("Failed to load spicy payload: {err}"))
+                            .inspect_err(|err| {
+                                tracing::error!("Failed to load spicy payload: {err}")
+                            })
                             .map(Bytes::from)?,
                     ))
                 })

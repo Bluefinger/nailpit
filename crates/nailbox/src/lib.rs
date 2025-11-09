@@ -11,7 +11,7 @@ use std::sync::Arc;
 #[inline]
 pub fn boxed_future_within<'a, T, F, Fut>(fut: F) -> Pin<Box<Fut>>
 where
-    Fut: Future<Output = T> + Send + 'a,
+    Fut: Future<Output = T> + 'a,
     F: FnOnce() -> Fut,
 {
     let mut boxed = Box::new_uninit();
