@@ -43,8 +43,8 @@ pub fn run(state: ServerState, spicy: Option<Arc<SpicyPayloads>>) -> color_eyre:
                 app
             };
 
-            app.wrap(actix_web::middleware::Compress::default())
-                .wrap(actix_web::middleware::NormalizePath::trim())
+            app.wrap(actix_web::middleware::NormalizePath::trim())
+                .wrap(actix_web::middleware::DefaultHeaders::default().add_content_type())
                 .configure(|cfg| nailroutes::nail_web_app_config(&state.config, &spicy, cfg))
                 .route(
                     "/health",

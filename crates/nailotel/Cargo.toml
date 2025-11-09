@@ -8,6 +8,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [features]
+tokio_console = ["dep:console-subscriber", "dep:tokio", "tokio/tracing"]
 
 [dependencies]
 nailconfig = { path = "../nailconfig" }
@@ -20,6 +21,8 @@ opentelemetry-otlp.workspace = true
 opentelemetry_sdk.workspace = true
 opentelemetry-semantic-conventions.workspace = true
 opentelemetry-appender-tracing = "0.31"
+console-subscriber = { workspace = true, optional = true, features = ["parking_lot"] }
+tokio = { workspace = true, optional = true }
 
 [lints]
 workspace = true

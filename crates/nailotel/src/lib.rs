@@ -35,8 +35,10 @@ pub struct OtelGuard {
 
 impl OtelGuard {
     pub fn shutdown(self) {
-        self.otel_logger.map(|logs_provider| logs_provider.shutdown());
-        self.otel_traces.map(|trace_provider| trace_provider.shutdown());
+        self.otel_logger
+            .map(|logs_provider| logs_provider.shutdown());
+        self.otel_traces
+            .map(|trace_provider| trace_provider.shutdown());
     }
 }
 
@@ -107,9 +109,7 @@ pub fn init_tracing_reporter(config: &NailConfig) -> Result<SdkTracerProvider> {
     Ok(provider)
 }
 
-pub fn init_telemetry(
-    config: Arc<nailconfig::NailConfig>,
-) -> Result<OtelGuard> {
+pub fn init_telemetry(config: Arc<nailconfig::NailConfig>) -> Result<OtelGuard> {
     let otel_logger = if config.open_telemetry.logs {
         Some(init_logging_reporter(config.as_ref())?)
     } else {
@@ -122,7 +122,15 @@ pub fn init_telemetry(
         None
     };
 
-    tracing_subscriber::registry()
+    #[cfg(feature = "tokio_console")]
+    let console_layer = console_subscriber::spawn();
+
+    let registry = tracing_subscriber::registry();
+
+    #[cfg(feature = "tokio_console")]
+    let registry = registry.with(console_layer);
+
+    registry
         .with(
             tracing_subscriber::filter::EnvFilter::builder()
                 .with_default_directive(LevelFilter::INFO.into())
@@ -166,5 +174,8 @@ pub fn init_telemetry(
     tracing::info!("Welcome to Nailpit!");
     tracing::info!(configuration = ?config, "Loaded configuration");
 
-    Ok(OtelGuard { otel_logger, otel_traces })
+    Ok(OtelGuard {
+        otel_logger,
+        otel_traces,
+    })
 }
