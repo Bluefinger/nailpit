@@ -3,7 +3,7 @@ mod modes;
 
 use std::{
     net::IpAddr,
-    sync::Arc,
+    sync::{Arc, LazyLock},
     time::{Duration, Instant},
 };
 
@@ -36,6 +36,7 @@ impl Scheduler {
         }
     }
 
+    #[inline]
     fn schedule<F, T>(&self, task: F) -> Option<T>
     where
         F: Fn() -> T,
@@ -55,6 +56,8 @@ impl Scheduler {
 }
 
 static PRUNING_SCHEDULER: Scheduler = Scheduler::new();
+
+static PEERS: LazyLock<HashMap<IpAddr, Peer, RandomState>> = LazyLock::new(Default::default);
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 enum PeerState {
@@ -91,6 +94,7 @@ impl NailRaterLayer {
 impl<S> tower::Layer<S> for NailRaterLayer {
     type Service = NailRater<S>;
 
+    #[inline]
     fn layer(&self, inner: S) -> Self::Service {
         NailRater::new(&self.config, self.spicy_payload.clone(), inner)
     }
@@ -98,20 +102,21 @@ impl<S> tower::Layer<S> for NailRaterLayer {
 
 #[derive(Debug, Clone)]
 pub struct NailRater<S> {
-    peers: Arc<HashMap<IpAddr, Peer, RandomState>>,
     mode: LimitModes,
     spicy_payload: Option<Arc<SpicyPayloads>>,
     inner: S,
 }
 
 impl<S> NailRater<S> {
+    #[inline]
     pub fn new(
         mode: impl Into<LimitModes>,
         spicy_payload: Option<Arc<SpicyPayloads>>,
         inner: S,
     ) -> Self {
+        LazyLock::force(&PEERS);
+
         Self {
-            peers: Default::default(),
             mode: mode.into(),
             spicy_payload,
             inner,
@@ -128,8 +133,7 @@ impl<S> NailRater<S> {
         proxied: IpAddr,
         headers: &HeaderMap,
     ) -> (PeerState, Option<SpicyPayloadKind>) {
-        let peer = self
-            .peers
+        let peer = PEERS
             .entry_sync(proxied)
             .and_modify(|p| {
                 p.count += 1;
@@ -151,11 +155,11 @@ impl<S> NailRater<S> {
         feature = "detailed_traces",
         tracing::instrument(name = "prune_old_peers", level = "trace", skip_all)
     )]
-    fn prune(peers: Arc<HashMap<IpAddr, Peer, RandomState>>) -> Boxed<()> {
+    fn prune() -> Boxed<()> {
         boxed_future_within(async move || {
             tracing::trace!("PRUNING STARTED");
 
-            peers
+            PEERS
                 .retain_async(|_, v| v.last_seen.elapsed() < crate::PEER_TIMEOUT)
                 .await
         })
@@ -171,6 +175,7 @@ where
     type Error = S::Error;
     type Future = Instrumented<NailedResponseFuture<S::Future>>;
 
+    #[inline]
     fn poll_ready(
         &mut self,
         cx: &mut std::task::Context<'_>,
@@ -205,7 +210,7 @@ where
             _ => return NailedResponseFuture::dropped().in_current_span(),
         };
 
-        let prune = PRUNING_SCHEDULER.schedule(|| Self::prune(self.peers.clone()));
+        let prune = PRUNING_SCHEDULER.schedule(Self::prune);
 
         let inner = self.inner.call(req);
 

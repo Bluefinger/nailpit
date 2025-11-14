@@ -103,6 +103,7 @@ impl Stream for MarkovStream {
         feature = "detailed_traces",
         tracing::instrument(level = "trace", name = "MarkovStream::poll_next", skip_all)
     )]
+    #[inline]
     fn poll_next(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
@@ -212,7 +213,8 @@ impl Stream for MarkovStream {
                             );
 
                             this.state.set(GeneratorState::Finished);
-                            continue 'outer;
+                            
+                            return Poll::Ready(Some(buffer.freeze()));
                         }
                     }
                 },

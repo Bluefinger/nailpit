@@ -3,8 +3,9 @@ use std::{fs::read_to_string, sync::Arc};
 use glob::glob;
 use nailbox::{arc_within, try_arc_within};
 use nailconfig::NailConfig;
-use nailgen::{GeneratedTemplate, MarkovGen, Template, TemplateError, WarningTemplate};
+use nailgen::{GeneratedTemplate, MarkovGen, TemplateError, WarningTemplate};
 use nailkov::interner::Interner;
+use nailstate::Templates;
 
 /// Takes a glob for finding all input files and returns a read-only list of
 /// all markov chains that can be generated.
@@ -16,7 +17,10 @@ pub fn get_input_files(
     let interned_mut = Arc::get_mut(&mut interner).unwrap();
 
     let inputs = glob(&config.generator.input_files)?
-        .filter_map(|path| path.inspect_err(|err| tracing::error!("IO Error: {err}")).ok())
+        .filter_map(|path| {
+            path.inspect_err(|err| tracing::error!("IO Error: {err}"))
+                .ok()
+        })
         .filter_map(|input| {
             MarkovGen::new(input, interned_mut)
                 .inspect_err(|err| tracing::error!("Markov Error: {err}"))
@@ -31,18 +35,18 @@ pub fn get_input_files(
     Ok((inputs, interner))
 }
 
-pub fn get_template_files(config: &NailConfig) -> color_eyre::Result<Arc<[Template]>> {
+pub fn get_template_files(config: &NailConfig) -> color_eyre::Result<Arc<Templates>> {
     let (index, content) = (
         read_to_string(&config.generator.warning_template)?,
         read_to_string(&config.generator.warning_message)?,
     );
     let generated = read_to_string(&config.generator.generated_template)?;
 
-    let templates = try_arc_within(|| -> Result<[Template; 2], TemplateError> {
-        Ok([
-            Template::Warning(WarningTemplate::init(index.into(), content.into())?),
-            Template::Generated(GeneratedTemplate::init(generated.into())?),
-        ])
+    let templates = try_arc_within(|| -> Result<Templates, TemplateError> {
+        Ok(Templates {
+            warning: WarningTemplate::init(index.into(), content.into())?,
+            generated: GeneratedTemplate::init(generated.into())?,
+        })
     })?;
 
     Ok(templates)

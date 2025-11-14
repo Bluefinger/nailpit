@@ -40,7 +40,7 @@ where
     type Data = Bytes;
     type Error = Infallible;
 
-    #[inline]
+    #[inline(always)]
     fn poll_frame(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,

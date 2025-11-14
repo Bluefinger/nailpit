@@ -5,21 +5,44 @@ use nailconfig::NailConfig;
 use nailgen::{GeneratedTemplate, MarkovGen, Template, WarningTemplate};
 use nailkov::interner::Interner;
 use nailrng::FastRng;
+use nailspicy::SpicyPayloads;
 use rand::seq::IndexedRandom;
+
+pub struct Templates {
+    pub warning: WarningTemplate,
+    pub generated: GeneratedTemplate,
+}
+
+#[derive(Clone)]
+pub struct NailPayloads {
+    spicy_payloads: Option<Arc<SpicyPayloads>>,
+}
+
+impl core::fmt::Debug for NailPayloads {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("NailPayloads").finish_non_exhaustive()
+    }
+}
+
+impl NailPayloads {
+    pub fn get(&self) -> Option<Arc<SpicyPayloads>> {
+        self.spicy_payloads.clone()
+    }
+}
 
 /// Smart pointer for all available Markov chains.
 #[derive(Clone)]
 pub struct NailInputs {
     chains: Arc<[MarkovGen]>,
     interner: Arc<Interner>,
-    templates: Arc<[Template]>,
+    templates: Arc<Templates>,
 }
 
 impl NailInputs {
     pub fn new(
         chains: Arc<[MarkovGen]>,
         interner: Arc<Interner>,
-        templates: Arc<[Template]>,
+        templates: Arc<Templates>,
     ) -> Self {
         Self {
             chains,
@@ -46,30 +69,14 @@ impl NailInputs {
         self.interner.clone()
     }
 
-    pub fn get_warning_template(&self) -> WarningTemplate {
-        self.templates
-            .iter()
-            .find_map(|template| {
-                if let Template::Warning(template) = template {
-                    Some(template.clone())
-                } else {
-                    None
-                }
-            })
-            .expect("There must be a Warning template")
+    #[inline]
+    pub fn get_warning_template(&self) -> Template {
+        Template::from(self.templates.warning.clone())
     }
 
-    pub fn get_generated_template(&self) -> GeneratedTemplate {
-        self.templates
-            .iter()
-            .find_map(|template| {
-                if let Template::Generated(template) = template {
-                    Some(template.clone())
-                } else {
-                    None
-                }
-            })
-            .expect("There must be a Generated template")
+    #[inline]
+    pub fn get_generated_template(&self) -> Template {
+        Template::from(self.templates.generated.clone())
     }
 }
 
@@ -107,6 +114,7 @@ impl Deref for AppConfig {
 pub struct ServerState {
     pub config: AppConfig,
     pub inputs: NailInputs,
+    pub spicy_payloads: NailPayloads,
 }
 
 impl ServerState {
@@ -114,7 +122,8 @@ impl ServerState {
         config: impl Into<AppConfig>,
         chains: Arc<[MarkovGen]>,
         interner: Arc<Interner>,
-        templates: Arc<[Template]>,
+        templates: Arc<Templates>,
+        spicy_payloads: Option<Arc<SpicyPayloads>>,
     ) -> Self {
         let config = config.into();
 
@@ -125,6 +134,7 @@ impl ServerState {
                 interner,
                 templates,
             },
+            spicy_payloads: NailPayloads { spicy_payloads },
         }
     }
 }
@@ -140,20 +150,6 @@ impl FromRef<ServerState> for NailInputs {
     #[inline]
     fn from_ref(input: &ServerState) -> Self {
         input.inputs.clone()
-    }
-}
-
-impl FromRef<ServerState> for WarningTemplate {
-    #[inline]
-    fn from_ref(input: &ServerState) -> Self {
-        input.inputs.get_warning_template()
-    }
-}
-
-impl FromRef<ServerState> for GeneratedTemplate {
-    #[inline]
-    fn from_ref(input: &ServerState) -> Self {
-        input.inputs.get_generated_template()
     }
 }
 
@@ -184,35 +180,5 @@ where
         state: &S,
     ) -> Result<Self, Self::Rejection> {
         Ok(NailInputs::from_ref(state))
-    }
-}
-
-impl FromRequestParts<ServerState> for WarningTemplate
-where
-    WarningTemplate: FromRef<ServerState>,
-    ServerState: Send + Sync,
-{
-    type Rejection = Infallible;
-
-    async fn from_request_parts(
-        _parts: &mut axum::http::request::Parts,
-        state: &ServerState,
-    ) -> Result<Self, Self::Rejection> {
-        Ok(WarningTemplate::from_ref(state))
-    }
-}
-
-impl FromRequestParts<ServerState> for GeneratedTemplate
-where
-    GeneratedTemplate: FromRef<ServerState>,
-    ServerState: Send + Sync,
-{
-    type Rejection = Infallible;
-
-    async fn from_request_parts(
-        _parts: &mut axum::http::request::Parts,
-        state: &ServerState,
-    ) -> Result<Self, Self::Rejection> {
-        Ok(GeneratedTemplate::from_ref(state))
     }
 }

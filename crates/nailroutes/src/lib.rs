@@ -1,30 +1,45 @@
-use std::sync::Arc;
-
-use axum::{Router, extract::MatchedPath, response::IntoResponse, routing::get};
+use axum::{
+    Router,
+    body::Bytes,
+    extract::{MatchedPath, Request},
+    http::HeaderValue,
+    response::IntoResponse,
+    routing::get,
+};
 use hyper::StatusCode;
-use nailgen::{GeneratedTemplate, Template, WarningTemplate};
 use nailrater::NailRaterLayer;
 use nailrng::FastRng;
-use nailspicy::SpicyPayloads;
 use nailstate::{AppConfig, NailInputs, ServerState};
 use nailstream::NailResponseStream;
 use nailtrace::trace_connection_layer;
 use tower::ServiceBuilder;
 use tower_http::{
     CompressionLevel, ServiceBuilderExt,
-    compression::{CompressionLayer, DefaultPredicate, Predicate, predicate::SizeAbove},
+    compression::CompressionLayer,
     normalize_path::NormalizePathLayer,
-    request_id::MakeRequestUuid,
+    request_id::{MakeRequestId, RequestId},
 };
 use tracing_futures::Instrument;
+use uuid::Uuid;
+
+/// A [`MakeRequestId`] that generates `UUID`s.
+#[derive(Clone, Copy, Default)]
+pub struct MakeRequestUuid;
+
+impl MakeRequestId for MakeRequestUuid {
+    fn make_request_id<B>(&mut self, _request: &Request<B>) -> Option<RequestId> {
+        // SAFETY: The UUID is converted to a valid UTF-8 string before being turned into
+        // Bytes. As such, the Bytes instance corresponds to a valid internal repr for
+        // HeaderValue, meaning we can skip validation directly.
+        let request_id = unsafe {
+            HeaderValue::from_maybe_shared_unchecked(Bytes::from(Uuid::now_v7().to_string()))
+        };
+        Some(RequestId::new(request_id))
+    }
+}
 
 #[tracing::instrument(skip_all)]
-async fn warning(
-    config: AppConfig,
-    inputs: NailInputs,
-    matched: MatchedPath,
-    generated_template: WarningTemplate,
-) -> impl IntoResponse {
+async fn warning(config: AppConfig, inputs: NailInputs, matched: MatchedPath) -> impl IntoResponse {
     let mut rng = FastRng::default();
 
     NailResponseStream::from_stream(
@@ -34,7 +49,7 @@ async fn warning(
                 matched,
                 config.clone_inner(),
                 inputs.get_interner(),
-                Template::from(generated_template),
+                inputs.get_warning_template(),
                 rng,
             )
             .in_current_span(),
@@ -46,7 +61,6 @@ async fn generated(
     config: AppConfig,
     inputs: NailInputs,
     matched: MatchedPath,
-    generated_template: GeneratedTemplate,
 ) -> impl IntoResponse {
     let mut rng = FastRng::default();
 
@@ -57,15 +71,16 @@ async fn generated(
                 matched,
                 config.clone_inner(),
                 inputs.get_interner(),
-                Template::from(generated_template),
+                inputs.get_generated_template(),
                 rng,
             )
             .in_current_span(),
     )
 }
 
-pub fn nail_app(state: ServerState, spicy_payload: Option<Arc<SpicyPayloads>>) -> Router {
+pub fn nail_app(state: ServerState) -> Router {
     let rate_limiting = state.config.rate_limiting.clone();
+    let spicy_payload = state.spicy_payloads.get();
 
     nail_route(state.clone())
         .layer(
@@ -76,11 +91,7 @@ pub fn nail_app(state: ServerState, spicy_payload: Option<Arc<SpicyPayloads>>) -
                     trace_connection_layer,
                 ))
                 .layer(NormalizePathLayer::trim_trailing_slash())
-                .layer(
-                    CompressionLayer::new()
-                        .quality(CompressionLevel::Default)
-                        .compress_when(DefaultPredicate::new().and(SizeAbove::new(1024))),
-                )
+                .layer(CompressionLayer::new().quality(CompressionLevel::Fastest))
                 .layer(NailRaterLayer::new(rate_limiting, spicy_payload))
                 .propagate_x_request_id(),
         )

@@ -28,6 +28,22 @@ use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt, util::Subscribe
 
 static RESOURCE: OnceLock<Resource> = OnceLock::new();
 
+pub struct OtelGuard {
+    otel_logger: Option<SdkLoggerProvider>,
+    otel_traces: Option<SdkTracerProvider>,
+}
+
+impl Drop for OtelGuard {
+    fn drop(&mut self) {
+        self.otel_logger
+            .take()
+            .map(|logs_provider| logs_provider.shutdown());
+        self.otel_traces
+            .take()
+            .map(|trace_provider| trace_provider.shutdown());
+    }
+}
+
 fn resource(config: &NailConfig) -> Resource {
     RESOURCE
         .get_or_init(|| {
@@ -95,9 +111,7 @@ pub fn init_tracing_reporter(config: &NailConfig) -> Result<SdkTracerProvider> {
     Ok(provider)
 }
 
-pub fn init_telemetry(
-    config: Arc<nailconfig::NailConfig>,
-) -> Result<(Option<SdkLoggerProvider>, Option<SdkTracerProvider>)> {
+pub fn init_telemetry(config: Arc<nailconfig::NailConfig>) -> Result<OtelGuard> {
     let otel_logger = if config.open_telemetry.logs {
         Some(init_logging_reporter(config.as_ref())?)
     } else {
@@ -148,5 +162,8 @@ pub fn init_telemetry(
     tracing::info!("Welcome to Nailpit!");
     tracing::info!(configuration = ?config, "Loaded configuration");
 
-    Ok((otel_logger, otel_traces))
+    Ok(OtelGuard {
+        otel_logger,
+        otel_traces,
+    })
 }
