@@ -1,14 +1,12 @@
-use std::sync::Arc;
-
 use color_eyre::Result;
 use futures_concurrency::future::Race;
-use tokio::{
-    signal,
-    sync::watch::{Receiver, Sender},
-};
+use tokio::signal;
+use tokio_util::sync::CancellationToken;
 
-pub async fn shutdown_task(notifier: Receiver<()>) -> Result<()> {
+pub async fn shutdown_task(notifier: CancellationToken) -> Result<()> {
     tracing::info!("Listening for shutdown signals");
+
+    let cancel = notifier.drop_guard();
 
     let sigterm = async {
         signal::unix::signal(signal::unix::SignalKind::terminate())?
@@ -18,15 +16,11 @@ pub async fn shutdown_task(notifier: Receiver<()>) -> Result<()> {
         Ok(())
     };
 
-    (signal::ctrl_c(), sigterm).race().await?;
+    tokio::spawn((signal::ctrl_c(), sigterm).race()).await??;
 
     tracing::info!("Shutdown signal received, finishing...");
 
-    drop(notifier);
+    drop(cancel);
 
     Ok(())
-}
-
-pub async fn wait_for_shutdown(notifier: Arc<Sender<()>>) {
-    notifier.closed().await;
 }

@@ -12,6 +12,7 @@ mod maybe_header;
 pub struct IdentifiedPeer(IpAddr);
 
 impl core::hash::Hash for IdentifiedPeer {
+    #[inline]
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         match self.0 {
             IpAddr::V4(a) => a.to_bits().hash(state),
@@ -21,6 +22,7 @@ impl core::hash::Hash for IdentifiedPeer {
 }
 
 impl IdentifiedPeer {
+    #[inline]
     pub fn extract(headers: &HeaderMap, connection: &ConnectInfo<SocketAddr>) -> Self {
         Self(
             maybe_x_forwarded_for(headers)

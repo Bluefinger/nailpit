@@ -8,6 +8,7 @@ const X_REAL_IP: &str = "x-real-ip";
 const X_FORWARDED_FOR: &str = "x-forwarded-for";
 
 /// Tries to parse the `x-forwarded-for` header
+#[inline]
 pub fn maybe_x_forwarded_for(headers: &HeaderMap) -> Option<IpAddr> {
     headers
         .get(X_FORWARDED_FOR)
@@ -22,6 +23,7 @@ pub fn maybe_x_forwarded_for(headers: &HeaderMap) -> Option<IpAddr> {
 }
 
 /// Tries to parse the `x-real-ip` header
+#[inline]
 pub fn maybe_x_real_ip(headers: &HeaderMap) -> Option<IpAddr> {
     headers
         .get(X_REAL_IP)
@@ -30,6 +32,7 @@ pub fn maybe_x_real_ip(headers: &HeaderMap) -> Option<IpAddr> {
 }
 
 /// Tries to parse `forwarded` headers
+#[inline]
 pub fn maybe_forwarded_for(headers: &HeaderMap) -> Option<IpAddr> {
     headers.get_all(FORWARDED).iter().find_map(|header| {
         header_value_to_str(header).and_then(|header| {
@@ -42,6 +45,7 @@ pub fn maybe_forwarded_for(headers: &HeaderMap) -> Option<IpAddr> {
     })
 }
 
+#[inline]
 pub fn header_value_to_str(header_value: &HeaderValue) -> Option<&str> {
     header_value.to_str().ok()
 }

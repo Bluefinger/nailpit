@@ -36,7 +36,7 @@ RUN if   [ "$TARGETPLATFORM" == "linux/amd64"  ]; then echo "-C target-cpu=x86-6
 RUN RUSTFLAGS="$(cat /.target-cpu)" cargo zigbuild --release --locked --target "$(cat /.target)" && \
     mv ./target/$(cat /.target)/release/nailpit .
 
-FROM alpine:latest AS runtime
+FROM gcr.io/distroless/static-debian13:latest AS runtime
 WORKDIR /app
 COPY ./configuration/pit.default.toml ./configuration/
 COPY --from=builder /nailpit/nailpit .

@@ -1,19 +1,17 @@
 #![forbid(unsafe_code)]
 use core::net::SocketAddr;
-use std::sync::Arc;
 
 use color_eyre::Result;
-use nailpit::app::App;
+use tokio_util::sync::CancellationToken;
 
 #[cfg(feature = "mimalloc")]
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 async fn spawn_axum_worker(
-    app: App,
-    shutdown_notifier: Arc<tokio::sync::watch::Sender<()>>,
+    state: nailstate::ServerState,
+    shutdown_notifier: CancellationToken,
 ) -> Result<()> {
-    let state = nailstate::ServerState::new(app.config, app.inputs, app.interner, app.templates);
     let listener = nailnet::get_tcp_socket(&state.config.server.socket_addr)?;
     let ip = listener.local_addr()?;
 
@@ -27,9 +25,9 @@ async fn spawn_axum_worker(
 
     axum::serve(
         listener,
-        nailroutes::nail_app(state, app.spicy).into_make_service_with_connect_info::<SocketAddr>(),
+        nailroutes::nail_app(state).into_make_service_with_connect_info::<SocketAddr>(),
     )
-    .with_graceful_shutdown(nailpit::shutdown::wait_for_shutdown(shutdown_notifier))
+    .with_graceful_shutdown(shutdown_notifier.cancelled_owned())
     .await?;
 
     Ok(())
@@ -46,8 +44,8 @@ fn main() -> Result<()> {
 
     let spicy = nailspicy::get_spicy_payload(config.as_ref());
 
-    nailpit::runtime::start(
-        App::new(config, inputs, interner, spicy, templates),
+    nailrt::start(
+        nailstate::ServerState::new(config, inputs, interner, templates, spicy),
         spawn_axum_worker,
     )?;
 
