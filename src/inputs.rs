@@ -16,10 +16,7 @@ pub fn get_input_files(
     let interned_mut = Arc::get_mut(&mut interner).unwrap();
 
     let inputs = glob(&config.generator.input_files)?
-        .filter_map(|path| {
-            path.inspect_err(|err| tracing::error!("IO Error: {err}"))
-                .ok()
-        })
+        .filter_map(|path| path.inspect_err(|err| tracing::error!("IO Error: {err}")).ok())
         .filter_map(|input| {
             MarkovGen::new(input, interned_mut)
                 .inspect_err(|err| tracing::error!("Markov Error: {err}"))

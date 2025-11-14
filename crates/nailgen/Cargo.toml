@@ -21,8 +21,10 @@ nailbox = { path = "../nailbox" }
 color-eyre.workspace = true
 pin-project-lite.workspace = true
 futures-lite.workspace = true
+axum.workspace = true
 rand.workspace = true
 bytes.workspace = true
 tracing.workspace = true
 tokio.workspace = true
+tokio-stream.workspace = true
 winnow.workspace = true

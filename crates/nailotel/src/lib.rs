@@ -28,20 +28,6 @@ use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt, util::Subscribe
 
 static RESOURCE: OnceLock<Resource> = OnceLock::new();
 
-pub struct OtelGuard {
-    otel_logger: Option<SdkLoggerProvider>,
-    otel_traces: Option<SdkTracerProvider>,
-}
-
-impl OtelGuard {
-    pub fn shutdown(self) {
-        self.otel_logger
-            .map(|logs_provider| logs_provider.shutdown());
-        self.otel_traces
-            .map(|trace_provider| trace_provider.shutdown());
-    }
-}
-
 fn resource(config: &NailConfig) -> Resource {
     RESOURCE
         .get_or_init(|| {
@@ -109,7 +95,9 @@ pub fn init_tracing_reporter(config: &NailConfig) -> Result<SdkTracerProvider> {
     Ok(provider)
 }
 
-pub fn init_telemetry(config: Arc<nailconfig::NailConfig>) -> Result<OtelGuard> {
+pub fn init_telemetry(
+    config: Arc<nailconfig::NailConfig>,
+) -> Result<(Option<SdkLoggerProvider>, Option<SdkTracerProvider>)> {
     let otel_logger = if config.open_telemetry.logs {
         Some(init_logging_reporter(config.as_ref())?)
     } else {
@@ -122,15 +110,7 @@ pub fn init_telemetry(config: Arc<nailconfig::NailConfig>) -> Result<OtelGuard> 
         None
     };
 
-    #[cfg(feature = "tokio_console")]
-    let console_layer = console_subscriber::spawn();
-
-    let registry = tracing_subscriber::registry();
-
-    #[cfg(feature = "tokio_console")]
-    let registry = registry.with(console_layer);
-
-    registry
+    tracing_subscriber::registry()
         .with(
             tracing_subscriber::filter::EnvFilter::builder()
                 .with_default_directive(LevelFilter::INFO.into())
@@ -140,9 +120,6 @@ pub fn init_telemetry(config: Arc<nailconfig::NailConfig>) -> Result<OtelGuard> 
                 .add_directive("tonic=off".parse().unwrap())
                 .add_directive("tower=off".parse().unwrap())
                 .add_directive("h2=off".parse().unwrap())
-                .add_directive("mio=off".parse().unwrap())
-                .add_directive("actix_http=off".parse().unwrap())
-                .add_directive("actix_server=off".parse().unwrap())
                 .add_directive("reqwest=off".parse().unwrap()),
         )
         .with(
@@ -159,9 +136,6 @@ pub fn init_telemetry(config: Arc<nailconfig::NailConfig>) -> Result<OtelGuard> 
                 .add_directive("tonic=off".parse().unwrap())
                 .add_directive("tower=off".parse().unwrap())
                 .add_directive("h2=off".parse().unwrap())
-                .add_directive("mio=off".parse().unwrap())
-                .add_directive("actix_http=off".parse().unwrap())
-                .add_directive("actix_server=off".parse().unwrap())
                 .add_directive("reqwest=off".parse().unwrap());
 
             OpenTelemetryTracingBridge::new(otel).with_filter(filter_otel)
@@ -174,8 +148,5 @@ pub fn init_telemetry(config: Arc<nailconfig::NailConfig>) -> Result<OtelGuard> 
     tracing::info!("Welcome to Nailpit!");
     tracing::info!(configuration = ?config, "Loaded configuration");
 
-    Ok(OtelGuard {
-        otel_logger,
-        otel_traces,
-    })
+    Ok((otel_logger, otel_traces))
 }

@@ -12,6 +12,7 @@ nailrng = { path = "../nailrng" }
 nailconfig = { path = "../nailconfig" }
 nailgen = { path = "../nailgen" }
 nailkov = { path = "../nailkov" }
+axum.workspace = true
 rand.workspace = true
 
 [lints]
