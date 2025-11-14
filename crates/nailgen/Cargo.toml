@@ -26,5 +26,4 @@ rand.workspace = true
 bytes.workspace = true
 tracing.workspace = true
 tokio.workspace = true
-tokio-stream.workspace = true
 winnow.workspace = true
