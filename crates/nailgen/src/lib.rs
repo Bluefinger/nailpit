@@ -213,7 +213,7 @@ impl Stream for MarkovStream {
                             );
 
                             this.state.set(GeneratorState::Finished);
-                            
+
                             return Poll::Ready(Some(buffer.freeze()));
                         }
                     }
