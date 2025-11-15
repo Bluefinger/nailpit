@@ -1,6 +1,4 @@
 #![forbid(unsafe_code)]
-use core::net::SocketAddr;
-
 use color_eyre::Result;
 use tokio_util::sync::CancellationToken;
 
@@ -23,14 +21,7 @@ async fn spawn_axum_worker(
         ip
     );
 
-    axum::serve(
-        listener,
-        nailroutes::nail_app(state).into_make_service_with_connect_info::<SocketAddr>(),
-    )
-    .with_graceful_shutdown(shutdown_notifier.cancelled_owned())
-    .await?;
-
-    Ok(())
+    nailserve::serve(listener, nailroutes::nail_app(state), shutdown_notifier).await
 }
 
 fn main() -> Result<()> {

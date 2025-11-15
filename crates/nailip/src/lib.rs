@@ -1,39 +1,35 @@
 use core::net::{IpAddr, SocketAddr};
 
-use axum::extract::ConnectInfo;
 use hyper::HeaderMap;
 
 pub use crate::maybe_header::*;
 
 mod maybe_header;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Hash)]
 #[repr(align(4))]
-pub struct IdentifiedPeer(IpAddr);
-
-impl core::hash::Hash for IdentifiedPeer {
-    #[inline]
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        match self.0 {
-            IpAddr::V4(a) => a.to_bits().hash(state),
-            IpAddr::V6(aaaa) => aaaa.to_bits().hash(state),
-        }
-    }
-}
+pub struct IdentifiedPeer(SocketAddr);
 
 impl IdentifiedPeer {
     #[inline]
-    pub fn extract(headers: &HeaderMap, connection: &ConnectInfo<SocketAddr>) -> Self {
-        Self(
+    pub fn extract(headers: &HeaderMap, connection: SocketAddr) -> Self {
+        Self(SocketAddr::new(
             maybe_x_forwarded_for(headers)
                 .or_else(|| maybe_x_real_ip(headers))
                 .or_else(|| maybe_forwarded_for(headers))
                 .unwrap_or_else(|| connection.ip()),
-        )
+            connection.port(),
+        ))
     }
 
+    #[inline]
     pub fn ip(&self) -> IpAddr {
-        self.0
+        self.0.ip()
+    }
+
+    #[inline]
+    pub fn port(&self) -> u16 {
+        self.0.port()
     }
 }
 

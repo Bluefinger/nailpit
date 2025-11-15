@@ -15,7 +15,6 @@ undocumented_unsafe_blocks = "warn"
 
 [workspace.dependencies]
 axum = { version = "0.8.1", default-features = false, features = [
-    "tokio",
     "http1",
     "http2",
     "macros",
@@ -109,6 +108,7 @@ nailrater = { path = "crates/nailrater" }
 nailtrace = { path = "crates/nailtrace" }
 nailotel = { path = "crates/nailotel" }
 nailstate = { path = "crates/nailstate" }
+nailserve = { path = "crates/nailserve" }
 nailip = { path = "crates/nailip" }
 nailroutes = { path = "crates/nailroutes" }
 nailspicy = { path = "crates/nailspicy" }

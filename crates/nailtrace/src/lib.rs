@@ -1,9 +1,8 @@
-use core::net::SocketAddr;
 use std::borrow::Cow;
 
 use axum::{
     Extension,
-    extract::{ConnectInfo, MatchedPath, Request},
+    extract::{MatchedPath, Request},
     middleware::Next,
     response::Response,
 };
@@ -49,15 +48,11 @@ pub fn http_flavor(version: Version) -> Cow<'static, str> {
 pub async fn trace_connection_layer(
     config: AppConfig,
     request_id: Extension<RequestId>,
-    connection: ConnectInfo<SocketAddr>,
-    mut req: Request,
+    peer: Extension<IdentifiedPeer>,
+    req: Request,
     next: Next,
 ) -> Response {
     use tracing_opentelemetry::OpenTelemetrySpanExt;
-
-    let peer = IdentifiedPeer::extract(req.headers(), &connection);
-
-    req.extensions_mut().insert(peer);
 
     if config.open_telemetry.traces {
         let headers = req.headers();
@@ -114,7 +109,7 @@ pub async fn trace_connection_layer(
         if let Some(port) = host.next() {
             span.record(SERVER_PORT, port);
         } else {
-            span.record(SERVER_PORT, connection.ip().to_string());
+            span.record(SERVER_PORT, peer.port().to_string());
         }
 
         let _ = span.set_parent(extract_context(headers));
