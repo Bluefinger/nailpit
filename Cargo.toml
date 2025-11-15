@@ -48,9 +48,6 @@ tracing-opentelemetry = "0.32"
 tracing-futures = { version = "0.2", features = ["futures-03"] }
 tower = { version = "0.5.2" }
 tower-http = { version = "0.6.2", features = [
-    "compression-br",
-    "compression-gzip",
-    "compression-zstd",
     "normalize-path",
     "request-id",
     "add-extension",

@@ -42,6 +42,8 @@ async fn cancel_loop(shutdown: &CancellationToken) -> color_eyre::Result<bool> {
     Ok(true)
 }
 
+/// Serves an Axum [`Router`] app with `hyper`, taking a [`CancellationToken`] to do a graceful shutdown
+/// loop.
 pub async fn serve(
     listener: TcpListener,
     app: Router,

@@ -17,6 +17,7 @@ nailstream = { path = "../nailstream" }
 nailspicy = { path = "../nailspicy" }
 nailrng = { path = "../nailrng" }
 axum = { workspace = true }
+axum-extra = { version = "0.12", features = ["middleware"] }
 hyper.workspace = true
 tracing.workspace = true
 tracing-futures.workspace = true

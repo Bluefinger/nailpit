@@ -21,7 +21,12 @@ async fn spawn_axum_worker(
         ip
     );
 
-    nailserve::serve(listener, nailroutes::nail_app(state), shutdown_notifier).await
+    tokio::spawn(nailserve::serve(
+        listener,
+        nailroutes::nail_app(state),
+        shutdown_notifier,
+    ))
+    .await?
 }
 
 fn main() -> Result<()> {

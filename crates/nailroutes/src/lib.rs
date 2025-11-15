@@ -6,6 +6,7 @@ use axum::{
     response::IntoResponse,
     routing::get,
 };
+use axum_extra::middleware::option_layer;
 use hyper::StatusCode;
 use nailrater::NailRaterLayer;
 use nailrng::FastRng;
@@ -14,8 +15,7 @@ use nailstream::NailResponseStream;
 use nailtrace::trace_connection_layer;
 use tower::ServiceBuilder;
 use tower_http::{
-    CompressionLevel, ServiceBuilderExt,
-    compression::CompressionLayer,
+    ServiceBuilderExt,
     normalize_path::NormalizePathLayer,
     request_id::{MakeRequestId, RequestId},
 };
@@ -81,17 +81,16 @@ async fn generated(
 pub fn nail_app(state: ServerState) -> Router {
     let rate_limiting = state.config.rate_limiting.clone();
     let spicy_payload = state.spicy_payloads.get();
+    let tracing_support = state.config.open_telemetry.traces;
 
-    nail_route(state.clone())
+    nail_route(state)
         .layer(
             ServiceBuilder::new()
                 .set_x_request_id(MakeRequestUuid)
-                .layer(axum::middleware::from_fn_with_state(
-                    state,
-                    trace_connection_layer,
+                .layer(option_layer(
+                    tracing_support.then(|| axum::middleware::from_fn(trace_connection_layer)),
                 ))
                 .layer(NormalizePathLayer::trim_trailing_slash())
-                .layer(CompressionLayer::new().quality(CompressionLevel::Fastest))
                 .layer(NailRaterLayer::new(rate_limiting, spicy_payload))
                 .propagate_x_request_id(),
         )
