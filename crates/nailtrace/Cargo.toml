@@ -20,6 +20,7 @@ pin-project-lite.workspace = true
 opentelemetry.workspace = true
 opentelemetry-http.workspace = true
 opentelemetry-semantic-conventions.workspace = true
+uuid = { version = "1.18", features = ["v7", "fast-rng"] }
 
 [lints]
 workspace = true

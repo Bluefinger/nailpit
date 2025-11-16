@@ -49,7 +49,6 @@ tracing-futures = { version = "0.2", features = ["futures-03"] }
 tower = { version = "0.5.2" }
 tower-http = { version = "0.6.2", features = [
     "normalize-path",
-    "request-id",
     "add-extension",
     "util",
 ] }

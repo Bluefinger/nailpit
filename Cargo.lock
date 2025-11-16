@@ -943,7 +943,6 @@ dependencies = [
  "tower-http",
  "tracing",
  "tracing-futures",
- "uuid",
 ]
 
 [[package]]
@@ -1031,6 +1030,7 @@ dependencies = [
  "tracing",
  "tracing-futures",
  "tracing-opentelemetry",
+ "uuid",
 ]
 
 [[package]]
@@ -1732,7 +1732,6 @@ dependencies = [
  "tower",
  "tower-layer",
  "tower-service",
- "uuid",
 ]
 
 [[package]]
