@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use axum::extract::MatchedPath;
 use bytes::{Bytes, BytesMut};
 use nailconfig::NailConfig;
 use nailkov::{NailKov, interner::Interner};
@@ -147,13 +148,13 @@ pub async fn footer(
     mut buf_mut: BytesMut,
     interner: Arc<Interner>,
     chain: Arc<NailKov>,
-    path: String,
+    path: MatchedPath,
     config: Arc<NailConfig>,
     mut rng: FastRng,
 ) -> Bytes {
     let path = path.as_str();
 
-    let route = path.strip_suffix("/{generated}").unwrap_or(path);
+    let route = path.strip_suffix("/{*generated}").unwrap_or(path);
 
     let total_links = rng.random_range(1..=config.generator.max_pit_links);
 

@@ -3,14 +3,16 @@ use std::{
     task::{Context, Poll},
 };
 
-use actix_web::{
-    HttpResponse,
-    dev::{ServiceRequest, ServiceResponse},
-    http::header::{CONTENT_ENCODING, ContentType},
-    mime,
-    web::Bytes,
+use axum::{
+    body::{Body, Bytes},
+    http::HeaderValue,
+    response::{IntoResponse, Response},
 };
 use futures_lite::{future::Boxed, ready};
+use hyper::{
+    StatusCode,
+    header::{CONTENT_ENCODING, CONTENT_TYPE},
+};
 use nailspicy::SpicyPayloadKind;
 use pin_project_lite::pin_project;
 use tokio::time::Sleep;
@@ -29,7 +31,9 @@ pin_project! {
             #[pin]
             state: NailedNormalFuture<T>,
         },
-        Other { state: NailedOtherState }
+        Other {
+            state: NailedOtherState,
+        }
     }
 }
 
@@ -57,17 +61,12 @@ pin_project! {
 }
 
 enum NailedOtherState {
-    Dropped {
-        req: ServiceRequest,
-    },
+    Dropped,
     Spicy {
-        req: ServiceRequest,
         payload: Bytes,
         kind: SpicyPayloadKind,
     },
-    Error {
-        req: ServiceRequest,
-    },
+    Error,
     Finished,
 }
 
@@ -99,28 +98,28 @@ impl<T> NailedResponseFuture<T> {
     }
 
     #[inline]
-    pub fn dropped(req: ServiceRequest) -> Self {
+    pub fn dropped() -> Self {
         Self {
             state: NailedState::Other {
-                state: NailedOtherState::Dropped { req },
+                state: NailedOtherState::Dropped,
             },
         }
     }
 
     #[inline]
-    pub fn spicy(req: ServiceRequest, payload: Bytes, kind: SpicyPayloadKind) -> Self {
+    pub fn spicy(payload: Bytes, kind: SpicyPayloadKind) -> Self {
         Self {
             state: NailedState::Other {
-                state: NailedOtherState::Spicy { req, payload, kind },
+                state: NailedOtherState::Spicy { payload, kind },
             },
         }
     }
 
     #[inline]
-    pub fn error(req: ServiceRequest) -> Self {
+    pub fn error() -> Self {
         Self {
             state: NailedState::Other {
-                state: NailedOtherState::Error { req },
+                state: NailedOtherState::Error,
             },
         }
     }
@@ -128,14 +127,10 @@ impl<T> NailedResponseFuture<T> {
 
 impl<E, F> Future for NailedResponseFuture<F>
 where
-    F: Future<Output = Result<ServiceResponse, E>>,
+    F: Future<Output = Result<Response<Body>, E>>,
 {
-    type Output = Result<ServiceResponse, E>;
+    type Output = Result<Response<Body>, E>;
 
-    #[cfg_attr(
-        feature = "detailed_traces",
-        tracing::instrument(name = "Response Future", level = "trace", skip_all)
-    )]
     #[inline]
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match self.project().state.project() {
@@ -147,14 +142,10 @@ where
 
 impl<E, F> Future for NailedNormalFuture<F>
 where
-    F: Future<Output = Result<ServiceResponse, E>>,
+    F: Future<Output = Result<Response<Body>, E>>,
 {
-    type Output = Result<ServiceResponse, E>;
+    type Output = Result<Response<Body>, E>;
 
-    #[cfg_attr(
-        feature = "detailed_traces",
-        tracing::instrument(name = "Normal Response", level = "trace", skip_all)
-    )]
     #[inline]
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut this = self.project();
@@ -187,24 +178,29 @@ impl NailedOtherState {
         tracing::instrument(name = "Other Response", level = "trace", skip_all)
     )]
     #[inline]
-    fn build_response(&mut self) -> ServiceResponse {
+    fn build_response(&mut self) -> Response<Body> {
         let state = core::mem::replace(self, Self::Finished);
 
         match state {
-            Self::Dropped { req } => {
-                req.into_response(HttpResponse::TooManyRequests().body("Go away."))
-            }
-            Self::Spicy { req, payload, kind } => {
-                let response = HttpResponse::TooManyRequests()
-                    .insert_header(ContentType(mime::TEXT_HTML_UTF_8))
-                    .insert_header((CONTENT_ENCODING, kind.as_str()))
-                    .body(payload);
+            Self::Dropped => (StatusCode::TOO_MANY_REQUESTS, "Go away").into_response(),
+            Self::Spicy { payload, kind } => {
+                let mut response = (StatusCode::TOO_MANY_REQUESTS, payload).into_response();
 
-                req.into_response(response)
+                let headers = response.headers_mut();
+
+                headers.insert(
+                    CONTENT_TYPE,
+                    HeaderValue::from_static("text/html; charset=utf-8"),
+                );
+                headers.insert(CONTENT_ENCODING, HeaderValue::from_static(kind.as_str()));
+
+                response
             }
-            Self::Error { req } => req.into_response(
-                HttpResponse::InternalServerError().body("Something went wrong here."),
-            ),
+            Self::Error => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Something is broken here",
+            )
+                .into_response(),
             Self::Finished => unreachable!("Response future has been polled more than once"),
         }
     }

@@ -1,7 +1,7 @@
 //! Crate for defining a HTML generator based on a markov chain source, using a string
 //! interner to reduce memory usage both within a markov chain and across multiple chains.
 
-use core::{convert::Infallible, task::Poll};
+use core::task::Poll;
 use std::{
     path::Path,
     pin::Pin,
@@ -9,6 +9,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use axum::extract::MatchedPath;
 use bytes::{Bytes, BytesMut};
 use color_eyre::Result;
 use futures_lite::Stream;
@@ -55,7 +56,7 @@ pin_project! {
 
 pin_project! {
     pub struct MarkovStream {
-        path: String,
+        path: MatchedPath,
         config: Arc<NailConfig>,
         interner: Arc<Interner>,
         markov: MarkovGen,
@@ -73,7 +74,7 @@ pin_project! {
 impl MarkovStream {
     pub fn new(
         markov: MarkovGen,
-        path: String,
+        path: MatchedPath,
         config: Arc<NailConfig>,
         interner: Arc<Interner>,
         template: Template,
@@ -96,12 +97,13 @@ impl MarkovStream {
 }
 
 impl Stream for MarkovStream {
-    type Item = Result<Bytes, Infallible>;
+    type Item = Bytes;
 
     #[cfg_attr(
         feature = "detailed_traces",
         tracing::instrument(level = "trace", name = "MarkovStream::poll_next", skip_all)
     )]
+    #[inline]
     fn poll_next(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
@@ -212,7 +214,7 @@ impl Stream for MarkovStream {
 
                             this.state.set(GeneratorState::Finished);
 
-                            return Poll::Ready(Some(Ok(buffer.freeze())));
+                            return Poll::Ready(Some(buffer.freeze()));
                         }
                     }
                 },
@@ -261,7 +263,7 @@ impl Stream for MarkovStream {
                             this.state.set(GeneratorState::Template);
                         }
 
-                        return Poll::Ready(Some(Ok(content)));
+                        return Poll::Ready(Some(content));
                     }
                     Poll::Pending => return Poll::Pending,
                 },
@@ -292,7 +294,7 @@ impl MarkovGen {
     #[inline]
     pub fn into_stream(
         self,
-        path: String,
+        path: MatchedPath,
         config: Arc<NailConfig>,
         interner: Arc<Interner>,
         template: Template,

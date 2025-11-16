@@ -1,11 +1,7 @@
 use std::sync::Arc;
 
-use actix_web::{
-    http::header::{ACCEPT_ENCODING, HeaderMap},
-    web::Bytes,
-};
 use hashbrown::HashMap;
-
+use hyper::{HeaderMap, body::Bytes, header::ACCEPT_ENCODING};
 use nailbox::try_arc_within;
 use nailconfig::{DropBehavior, NailConfig, RateLimitingConfig};
 use rapidhash::fast::RandomState;

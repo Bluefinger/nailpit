@@ -26,10 +26,10 @@ RUN if   [ "$TARGETPLATFORM" == "linux/amd64"  ]; then echo "x86_64-unknown-linu
     fi
 RUN rustup target add "$(cat /.target)"
 
-RUN if   [ "$TARGETPLATFORM" == "linux/amd64"  ]; then echo "-C target-cpu=x86-64-v3 -C target-feature=+crt-static"      >/.target-cpu; \
-    elif [ "$TARGETPLATFORM" == "linux/arm64"  ]; then echo "-C target-cpu=cortex-a53 -C target-feature=+crt-static"     >/.target-cpu; \
-    elif [ "$TARGETPLATFORM" == "linux/arm/v7" ]; then echo "-C target-feature=+crt-static" >/.target-cpu; \
-    elif [ "$TARGETPLATFORM" == "linux/riscv64" ]; then echo "-C target-feature=+crt-static"  >/.target-cpu; \
+RUN if   [ "$TARGETPLATFORM" == "linux/amd64"  ]; then echo "-C target-cpu=x86-64-v3"      >/.target-cpu; \
+    elif [ "$TARGETPLATFORM" == "linux/arm64"  ]; then echo "-C target-cpu=cortex-a53"     >/.target-cpu; \
+    elif [ "$TARGETPLATFORM" == "linux/arm/v7" ]; then echo "" >/.target-cpu; \
+    elif [ "$TARGETPLATFORM" == "linux/riscv64" ]; then echo ""  >/.target-cpu; \
     else echo "Unsupported architecture $TARGETPLATFORM"; exit 1; \
     fi
 

@@ -1,5 +1,5 @@
 [package]
-name = "nailstate"
+name = "nailrt"
 authors.workspace = true
 edition.workspace = true
 repository.workspace = true
@@ -8,13 +8,18 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-nailrng = { path = "../nailrng" }
 nailconfig = { path = "../nailconfig" }
-nailgen = { path = "../nailgen" }
 nailkov = { path = "../nailkov" }
+nailgen = { path = "../nailgen" }
 nailspicy = { path = "../nailspicy" }
-axum.workspace = true
-rand.workspace = true
+nailstate = { path = "../nailstate" }
+nailotel = { path = "../nailotel" }
+color-eyre.workspace = true
+core_affinity = "0.8.3"
+futures-concurrency.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
 
 [lints]
 workspace = true

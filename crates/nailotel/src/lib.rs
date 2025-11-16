@@ -33,11 +33,13 @@ pub struct OtelGuard {
     otel_traces: Option<SdkTracerProvider>,
 }
 
-impl OtelGuard {
-    pub fn shutdown(self) {
+impl Drop for OtelGuard {
+    fn drop(&mut self) {
         self.otel_logger
+            .take()
             .map(|logs_provider| logs_provider.shutdown());
         self.otel_traces
+            .take()
             .map(|trace_provider| trace_provider.shutdown());
     }
 }
@@ -122,15 +124,7 @@ pub fn init_telemetry(config: Arc<nailconfig::NailConfig>) -> Result<OtelGuard> 
         None
     };
 
-    #[cfg(feature = "tokio_console")]
-    let console_layer = console_subscriber::spawn();
-
-    let registry = tracing_subscriber::registry();
-
-    #[cfg(feature = "tokio_console")]
-    let registry = registry.with(console_layer);
-
-    registry
+    tracing_subscriber::registry()
         .with(
             tracing_subscriber::filter::EnvFilter::builder()
                 .with_default_directive(LevelFilter::INFO.into())
@@ -140,9 +134,6 @@ pub fn init_telemetry(config: Arc<nailconfig::NailConfig>) -> Result<OtelGuard> 
                 .add_directive("tonic=off".parse().unwrap())
                 .add_directive("tower=off".parse().unwrap())
                 .add_directive("h2=off".parse().unwrap())
-                .add_directive("mio=off".parse().unwrap())
-                .add_directive("actix_http=off".parse().unwrap())
-                .add_directive("actix_server=off".parse().unwrap())
                 .add_directive("reqwest=off".parse().unwrap()),
         )
         .with(
@@ -159,9 +150,6 @@ pub fn init_telemetry(config: Arc<nailconfig::NailConfig>) -> Result<OtelGuard> 
                 .add_directive("tonic=off".parse().unwrap())
                 .add_directive("tower=off".parse().unwrap())
                 .add_directive("h2=off".parse().unwrap())
-                .add_directive("mio=off".parse().unwrap())
-                .add_directive("actix_http=off".parse().unwrap())
-                .add_directive("actix_server=off".parse().unwrap())
                 .add_directive("reqwest=off".parse().unwrap());
 
             OpenTelemetryTracingBridge::new(otel).with_filter(filter_otel)

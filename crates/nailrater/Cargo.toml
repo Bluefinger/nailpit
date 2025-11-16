@@ -11,12 +11,14 @@ rust-version.workspace = true
 detailed_traces = []
 
 [dependencies]
+nailfv = { path = "../nailfv" }
 nailconfig = { path = "../nailconfig" }
 nailspicy = { path = "../nailspicy" }
 nailip = { path = "../nailip" }
 nailbox = { path = "../nailbox" }
-actix-web.workspace = true
+axum.workspace = true
 futures-lite.workspace = true
+hyper.workspace = true
 pin-project-lite.workspace = true
 parking_lot.workspace = true
 tracing.workspace = true
@@ -24,6 +26,7 @@ tracing-futures.workspace = true
 scc.workspace = true
 tokio.workspace = true
 rapidhash.workspace = true
+tower.workspace = true
 
 [lints]
 workspace = true

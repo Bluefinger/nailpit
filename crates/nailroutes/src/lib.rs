@@ -1,75 +1,94 @@
-use std::sync::Arc;
-
-use actix_web::{HttpRequest, HttpResponse, http::header::ContentType, web::ThinData};
+use axum::{Router, extract::MatchedPath, routing::get};
+use axum_extra::middleware::option_layer;
+use hyper::StatusCode;
+use nailrater::NailRaterLayer;
 use nailrng::FastRng;
-use nailspicy::SpicyPayloads;
-use nailstate::{AppConfig, ServerState};
-use nailtrace::middleware::TracingLogger;
+use nailstate::{AppConfig, NailInputs, ServerState};
+use nailstream::NailResponseStream;
+use nailtrace::trace_connection_layer;
+use tower::ServiceBuilder;
+use tower_http::normalize_path::NormalizePathLayer;
 use tracing_futures::Instrument;
 
 #[tracing::instrument(skip_all)]
-async fn warning_index(ThinData(state): ThinData<ServerState>, req: HttpRequest) -> HttpResponse {
+async fn warning(
+    config: AppConfig,
+    inputs: NailInputs,
+    matched: MatchedPath,
+) -> NailResponseStream<tracing_futures::Instrumented<nailgen::MarkovStream>> {
     let mut rng = FastRng::default();
 
-    let stream = state
-        .inputs
-        .get_random_input(&mut rng)
-        .into_stream(
-            req.match_pattern().unwrap(),
-            state.config.clone_inner(),
-            state.inputs.get_interner(),
-            state.inputs.get_warning_template(),
-            rng,
-        )
-        .in_current_span();
-
-    HttpResponse::Ok()
-        .content_type(ContentType::html())
-        .streaming(stream)
+    NailResponseStream::from_stream(
+        inputs
+            .get_random_input(&mut rng)
+            .into_stream(
+                matched,
+                config.clone_inner(),
+                inputs.get_interner(),
+                inputs.get_warning_template(),
+                rng,
+            )
+            .in_current_span(),
+    )
 }
 
 #[tracing::instrument(skip_all)]
-async fn generated_page(ThinData(state): ThinData<ServerState>, req: HttpRequest) -> HttpResponse {
+async fn generated(
+    config: AppConfig,
+    inputs: NailInputs,
+    matched: MatchedPath,
+) -> NailResponseStream<tracing_futures::Instrumented<nailgen::MarkovStream>> {
     let mut rng = FastRng::default();
 
-    let stream = state
-        .inputs
-        .get_random_input(&mut rng)
-        .into_stream(
-            req.match_pattern().unwrap(),
-            state.config.clone_inner(),
-            state.inputs.get_interner(),
-            state.inputs.get_generated_template(),
-            rng,
-        )
-        .in_current_span();
-
-    HttpResponse::Ok()
-        .content_type(ContentType::html())
-        .streaming(stream)
+    NailResponseStream::from_stream(
+        inputs
+            .get_random_input(&mut rng)
+            .into_stream(
+                matched,
+                config.clone_inner(),
+                inputs.get_interner(),
+                inputs.get_generated_template(),
+                rng,
+            )
+            .in_current_span(),
+    )
 }
 
-pub fn nail_web_app_config(
-    config: &AppConfig,
-    spicy: &Option<Arc<SpicyPayloads>>,
-    cfg: &mut actix_web::web::ServiceConfig,
-) {
-    config.server.pit_routes.iter().for_each(|path| {
-        let traces = TracingLogger::new(if config.open_telemetry.traces {
-            nailtrace::middleware::BuilderKind::Default
-        } else {
-            nailtrace::middleware::BuilderKind::Minimal
-        });
+pub fn nail_app(state: ServerState) -> Router {
+    let rate_limiting = state.config.rate_limiting.clone();
+    let spicy_payload = state.spicy_payloads.get();
+    let tracing_support = state.config.open_telemetry.traces;
 
-        cfg.service(
-            actix_web::web::scope(path)
-                .wrap(nailrater::NailRaterLayer::new(
-                    config.rate_limiting.clone(),
-                    spicy.clone(),
+    nail_route(state)
+        .layer(
+            ServiceBuilder::new()
+                .layer(option_layer(
+                    tracing_support.then(|| axum::middleware::from_fn(trace_connection_layer)),
                 ))
-                .wrap(traces)
-                .route("", actix_web::web::get().to(warning_index))
-                .route("/{generated}", actix_web::web::get().to(generated_page)),
-        );
-    });
+                .layer(NormalizePathLayer::trim_trailing_slash())
+                .layer(NailRaterLayer::new(rate_limiting, spicy_payload)),
+        )
+        .route("/favicon.ico", get(async || StatusCode::NOT_FOUND))
+        .route("/health", get(async || StatusCode::NO_CONTENT))
+}
+
+pub fn nail_route(state: ServerState) -> Router {
+    let generation_routes = Router::new()
+        .route("/", get(warning))
+        .route("/{*generated}", get(generated));
+
+    state
+        .config
+        .server
+        .pit_routes
+        .iter()
+        .fold(Router::new(), |router, path| {
+            if path == "/" {
+                router.merge(generation_routes.clone())
+            } else {
+                let nested_routes = generation_routes.clone();
+                router.nest(path, nested_routes)
+            }
+        })
+        .with_state(state)
 }

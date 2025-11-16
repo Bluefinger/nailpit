@@ -14,8 +14,14 @@ rust-version = "1.89.0"
 undocumented_unsafe_blocks = "warn"
 
 [workspace.dependencies]
-actix-web = { version = "4.11", default-features = false, features = ["unicode", "http2"] }
+axum = { version = "0.8.1", default-features = false, features = [
+    "http1",
+    "http2",
+    "macros",
+] }
+axum-core = { version = "0.5.0", default-features = false }
 bytes = "1.10.1"
+hyper = { version = "1.6.0", default-features = false, features = ["server"] }
 color-eyre = { version = "0.6.3", default-features = false }
 serde = { version = "1.0.219", features = ["derive"] }
 rand_core = "0.9.3"
@@ -32,12 +38,20 @@ itertools = "0.14.0"
 indexmap = "2.9.0"
 parking_lot = "0.12"
 tokio = { version = "1.44.2", features = ["rt", "sync", "time", "parking_lot", "net", "signal"] }
+tokio-util = "0.7"
 futures-lite = "2.6.0"
+futures-concurrency = "7.6.3"
 pin-project-lite = "0.2.16"
 scc = "3.3.2"
 tracing = "0.1"
 tracing-opentelemetry = "0.32"
 tracing-futures = { version = "0.2", features = ["futures-03"] }
+tower = { version = "0.5.2" }
+tower-http = { version = "0.6.2", features = [
+    "normalize-path",
+    "add-extension",
+    "util",
+] }
 opentelemetry = { version = "0.31.0", default-features = false, features = ["trace", "logs"] }
 opentelemetry-http = "0.31"
 opentelemetry-otlp = { version = "0.31.0", default-features = false, features = [
@@ -51,11 +65,10 @@ opentelemetry_sdk = { version = "0.31.0", default-features = false, features = [
     "logs",
     "rt-tokio-current-thread",
     "experimental_logs_batch_log_processor_with_async_runtime",
-    "experimental_trace_batch_span_processor_with_async_runtime",
+    "experimental_trace_batch_span_processor_with_async_runtime"
 ] }
 opentelemetry-semantic-conventions = "0.31"
 winnow = { version = "0.7.6", features = ["simd"] }
-console-subscriber = "0.5.0"
 
 [package]
 name = "nailpit"
@@ -80,28 +93,31 @@ name = "nailpit"
 default = ["mimalloc"]
 mimalloc = ["dep:mimalloc"]
 detailed_traces = ["nailgen/detailed_traces", "nailrater/detailed_traces"]
-tokio_console = ["nailotel/tokio_console"]
 
 [dependencies]
 nailkov = { path = "crates/nailkov" }
 nailrng = { path = "crates/nailrng" }
 nailconfig = { path = "crates/nailconfig" }
+nailstream = { path = "crates/nailstream" }
 nailgen = { path = "crates/nailgen" }
 nailrater = { path = "crates/nailrater" }
 nailtrace = { path = "crates/nailtrace" }
 nailotel = { path = "crates/nailotel" }
 nailstate = { path = "crates/nailstate" }
+nailserve = { path = "crates/nailserve" }
 nailip = { path = "crates/nailip" }
 nailroutes = { path = "crates/nailroutes" }
 nailspicy = { path = "crates/nailspicy" }
+nailnet = { path = "crates/nailnet" }
 nailbox = { path = "crates/nailbox" }
-actix-web.workspace = true
-rand.workspace = true
+nailrt = { path = "crates/nailrt" }
+axum.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
 tracing.workspace = true
 color-eyre.workspace = true
 glob = "0.3.2"
 mimalloc = { version = "0.1.48", features = ["v3"], optional = true }
-core_affinity = "0.8.3"
 
 [profile.release]
 codegen-units = 1

@@ -1,21 +1,35 @@
-use actix_web::dev::ConnectionInfo;
+use core::net::{IpAddr, SocketAddr};
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct IdentifiedPeer(String);
+use hyper::HeaderMap;
+
+pub use crate::maybe_header::*;
+
+mod maybe_header;
+
+#[derive(Debug, Clone, Copy, Hash)]
+#[repr(align(4))]
+pub struct IdentifiedPeer(SocketAddr);
 
 impl IdentifiedPeer {
-    pub fn extract(connection: &ConnectionInfo) -> Self {
-        Self(
-            connection
-                .realip_remote_addr()
-                .or_else(|| connection.peer_addr())
-                .unwrap_or("Unknown")
-                .into(),
-        )
+    #[inline]
+    pub fn extract(headers: &HeaderMap, connection: SocketAddr) -> Self {
+        Self(SocketAddr::new(
+            maybe_x_forwarded_for(headers)
+                .or_else(|| maybe_x_real_ip(headers))
+                .or_else(|| maybe_forwarded_for(headers))
+                .unwrap_or_else(|| connection.ip()),
+            connection.port(),
+        ))
     }
 
-    pub fn peer(&self) -> &str {
-        &self.0
+    #[inline]
+    pub fn ip(&self) -> IpAddr {
+        self.0.ip()
+    }
+
+    #[inline]
+    pub fn port(&self) -> u16 {
+        self.0.port()
     }
 }
 
