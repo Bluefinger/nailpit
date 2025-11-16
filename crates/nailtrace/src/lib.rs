@@ -51,7 +51,7 @@ pub async fn trace_connection_layer(
     peer: Extension<IdentifiedPeer>,
     req: Request,
     next: Next,
-) -> Response<StreamSpan<AxumBody>> {
+) -> Response<InspectBody<AxumBody>> {
     use tracing_opentelemetry::OpenTelemetrySpanExt;
 
     let headers = req.headers();
@@ -151,7 +151,7 @@ pin_project_lite::pin_project! {
 
 pin_project_lite::pin_project! {
     #[doc(hidden)]
-    pub struct StreamSpan<B> {
+    pub struct InspectBody<B> {
         #[pin]
         body: B,
         span: Span,
@@ -162,7 +162,7 @@ impl<F> core::future::Future for InspectHttpResponse<F>
 where
     F: core::future::Future<Output = Response>,
 {
-    type Output = Response<StreamSpan<AxumBody>>;
+    type Output = Response<InspectBody<AxumBody>>;
 
     #[inline]
     fn poll(
@@ -203,14 +203,14 @@ where
 
             response.headers_mut().insert("x-request-id", request_id);
 
-            core::task::Poll::Ready(response.map(|body| StreamSpan { body, span }))
+            core::task::Poll::Ready(response.map(|body| InspectBody { body, span }))
         } else {
             core::task::Poll::Pending
         }
     }
 }
 
-impl<B> Body for StreamSpan<B>
+impl<B> Body for InspectBody<B>
 where
     B: Body,
 {
