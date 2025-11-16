@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 
 use axum::{
+    body::{Body as AxumBody, Bytes},
     Extension,
     extract::{MatchedPath, Request},
     http::HeaderValue,
@@ -50,7 +51,7 @@ pub async fn trace_connection_layer(
     peer: Extension<IdentifiedPeer>,
     req: Request,
     next: Next,
-) -> Response<StreamSpan<axum::body::Body>> {
+) -> Response<StreamSpan<AxumBody>> {
     use tracing_opentelemetry::OpenTelemetrySpanExt;
 
     let headers = req.headers();
@@ -60,7 +61,7 @@ pub async fn trace_connection_layer(
         // Bytes. As such, the Bytes instance corresponds to a valid internal repr for
         // HeaderValue, meaning we can skip validation directly.
         || unsafe {
-            HeaderValue::from_maybe_shared_unchecked(axum::body::Bytes::from(
+            HeaderValue::from_maybe_shared_unchecked(Bytes::from(
                 Uuid::now_v7().to_string(),
             ))
         },
@@ -161,7 +162,7 @@ impl<F> core::future::Future for InspectHttpResponse<F>
 where
     F: core::future::Future<Output = Response>,
 {
-    type Output = Response<StreamSpan<axum::body::Body>>;
+    type Output = Response<StreamSpan<AxumBody>>;
 
     #[inline]
     fn poll(
@@ -218,9 +219,9 @@ where
 
     #[inline(always)]
     fn poll_frame(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Option<Result<hyper::body::Frame<Self::Data>, Self::Error>>> {
+        self: core::pin::Pin<&mut Self>,
+        cx: &mut core::task::Context<'_>,
+    ) -> core::task::Poll<Option<Result<hyper::body::Frame<Self::Data>, Self::Error>>> {
         let this = self.project();
 
         this.span.in_scope(|| this.body.poll_frame(cx))
