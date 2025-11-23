@@ -48,7 +48,7 @@ pin_project! {
             keep_generating: bool,
         },
         Delay {
-            delay: Pin<Box<Sleep>>
+            delay: Pin<Box<Sleep>>,
         },
         Finished,
     }
@@ -255,10 +255,12 @@ impl Stream for MarkovStream {
                     Poll::Ready(content) => {
                         *this.total_bytes += content.len();
 
-                        if let Some(delay) = delay_output(this.config) {
-                            this.state.set(GeneratorState::Delay { delay });
-                        } else if *keep_generating {
-                            this.state.set(GeneratorState::Content);
+                        if *keep_generating {
+                            if let Some(delay) = delay_output(this.config) {
+                                this.state.set(GeneratorState::Delay { delay });
+                            } else {
+                                this.state.set(GeneratorState::Content);
+                            }
                         } else {
                             this.state.set(GeneratorState::Template);
                         }
@@ -270,6 +272,7 @@ impl Stream for MarkovStream {
                 GeneratorStateProj::Delay { delay } => match delay.as_mut().poll(cx) {
                     Poll::Ready(_) => {
                         this.state.set(GeneratorState::Content);
+
                         continue;
                     }
                     Poll::Pending => return Poll::Pending,
