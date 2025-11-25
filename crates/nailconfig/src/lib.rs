@@ -109,11 +109,14 @@ pub struct OpenTelemetryConfig {
 pub fn get_configuration() -> Result<Arc<NailConfig>> {
     let socket_addr = std::env::var("NAILPIT_SOCKET").ok();
 
-    let config_dir = std::env::current_dir()?.join("configuration");
+    let working_dir = std::env::current_dir()?;
+
+    let config_dir = working_dir.join("configuration");
+    let default_dir = working_dir.join("defaults");
 
     let config = config::Config::builder()
         .add_source(
-            config::File::from(config_dir.join("pit.default.toml"))
+            config::File::from(default_dir.join("pit.default.toml"))
                 .format(config::FileFormat::Toml),
         )
         .add_source(

@@ -38,7 +38,7 @@ RUN RUSTFLAGS="$(cat /.target-cpu)" cargo zigbuild --release --locked --target "
 
 FROM gcr.io/distroless/static-debian13:latest AS runtime
 WORKDIR /app
-COPY ./configuration/pit.default.toml ./configuration/
+COPY ./defaults/pit.default.toml ./defaults/
 COPY --from=builder /nailpit/nailpit .
 VOLUME /app/configuration
 VOLUME /app/input
