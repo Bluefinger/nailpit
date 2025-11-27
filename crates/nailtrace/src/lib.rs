@@ -1,8 +1,8 @@
 use std::borrow::Cow;
 
 use axum::{
-    body::{Body as AxumBody, Bytes},
     Extension,
+    body::{Body as AxumBody, Bytes},
     extract::{MatchedPath, Request},
     http::HeaderValue,
     middleware::Next,
@@ -48,7 +48,7 @@ pub fn http_flavor(version: Version) -> Cow<'static, str> {
 }
 
 pub async fn trace_connection_layer(
-    peer: Extension<IdentifiedPeer>,
+    identified: Extension<IdentifiedPeer>,
     req: Request,
     next: Next,
 ) -> Response<InspectBody<AxumBody>> {
@@ -61,9 +61,7 @@ pub async fn trace_connection_layer(
         // Bytes. As such, the Bytes instance corresponds to a valid internal repr for
         // HeaderValue, meaning we can skip validation directly.
         || unsafe {
-            HeaderValue::from_maybe_shared_unchecked(Bytes::from(
-                Uuid::now_v7().to_string(),
-            ))
+            HeaderValue::from_maybe_shared_unchecked(Bytes::from(Uuid::now_v7().to_string()))
         },
     );
 
@@ -81,7 +79,7 @@ pub async fn trace_connection_layer(
         http.request.method = %http_method,
         http.route = path, // to set by router of "webframework" after
         network.protocol.version = %http_flavor(req.version()),
-        client.address = peer.ip().to_string(), //%$request.connection_info().realip_remote_addr().unwrap_or(""),
+        client.address = identified.peer(),
         user_agent.original = headers
             .get(USER_AGENT)
             .and_then(header_value_to_str)

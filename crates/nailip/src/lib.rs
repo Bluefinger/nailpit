@@ -1,4 +1,4 @@
-use core::net::{IpAddr, SocketAddr};
+use core::net::SocketAddr;
 
 use hyper::HeaderMap;
 
@@ -6,30 +6,24 @@ pub use crate::maybe_header::*;
 
 mod maybe_header;
 
-#[derive(Debug, Clone, Copy, Hash)]
-#[repr(align(4))]
-pub struct IdentifiedPeer(SocketAddr);
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(transparent)]
+pub struct IdentifiedPeer(Box<str>);
 
 impl IdentifiedPeer {
     #[inline]
     pub fn extract(headers: &HeaderMap, connection: SocketAddr) -> Self {
-        Self(SocketAddr::new(
+        Self(
             maybe_x_forwarded_for(headers)
                 .or_else(|| maybe_x_real_ip(headers))
                 .or_else(|| maybe_forwarded_for(headers))
-                .unwrap_or_else(|| connection.ip()),
-            connection.port(),
-        ))
+                .unwrap_or_else(|| connection.to_string().into()),
+        )
     }
 
     #[inline]
-    pub fn ip(&self) -> IpAddr {
-        self.0.ip()
-    }
-
-    #[inline]
-    pub fn port(&self) -> u16 {
-        self.0.port()
+    pub fn peer(&self) -> &str {
+        &self.0
     }
 }
 

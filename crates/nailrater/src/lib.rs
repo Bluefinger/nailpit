@@ -2,7 +2,6 @@ mod futures;
 mod modes;
 
 use std::{
-    net::IpAddr,
     sync::{Arc, LazyLock},
     time::{Duration, Instant},
 };
@@ -57,7 +56,8 @@ impl Scheduler {
 
 static PRUNING_SCHEDULER: Scheduler = Scheduler::new();
 
-static PEERS: LazyLock<HashMap<IpAddr, Peer, RandomState>> = LazyLock::new(Default::default);
+static PEERS: LazyLock<HashMap<IdentifiedPeer, PeerRecord, RandomState>> =
+    LazyLock::new(Default::default);
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 enum PeerState {
@@ -69,7 +69,7 @@ enum PeerState {
 }
 
 #[derive(Debug, Clone)]
-struct Peer {
+struct PeerRecord {
     count: u64,
     state: PeerState,
     last_seen: Instant,
@@ -130,21 +130,24 @@ impl<S> NailRater<S> {
     )]
     fn track_visiting_peer(
         &self,
-        proxied: IpAddr,
+        proxied: &IdentifiedPeer,
         headers: &HeaderMap,
     ) -> (PeerState, Option<SpicyPayloadKind>) {
         let peer = PEERS
-            .entry_sync(proxied)
+            .entry_sync(proxied.clone())
             .and_modify(|p| {
                 p.count += 1;
                 p.last_seen = Instant::now();
                 p.state = self.mode.limit(&p.count);
             })
-            .or_insert_with(|| Peer {
-                count: 1,
-                state: self.mode.limit(&1),
-                last_seen: Instant::now(),
-                supports_spicy: SpicyPayloadKind::accepts_encoding(headers),
+            .or_insert_with(|| {
+                tracing::info!("remote.peer" = %proxied, "New remote peer");
+                PeerRecord {
+                    count: 1,
+                    state: self.mode.limit(&1),
+                    last_seen: Instant::now(),
+                    supports_spicy: SpicyPayloadKind::accepts_encoding(headers),
+                }
             });
 
         (peer.state, peer.supports_spicy)
@@ -189,7 +192,7 @@ where
             return NailedResponseFuture::error().in_current_span();
         };
 
-        let (peer_state, supports_spicy) = self.track_visiting_peer(proxied.ip(), req.headers());
+        let (peer_state, supports_spicy) = self.track_visiting_peer(proxied, req.headers());
 
         let delay = match peer_state {
             PeerState::Ready => None,

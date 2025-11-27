@@ -1,5 +1,3 @@
-use std::net::IpAddr;
-
 use axum::http::HeaderValue;
 use hyper::{HeaderMap, header::FORWARDED};
 use nailfv::{Parser, extract_for};
@@ -9,7 +7,7 @@ const X_FORWARDED_FOR: &str = "x-forwarded-for";
 
 /// Tries to parse the `x-forwarded-for` header
 #[inline]
-pub fn maybe_x_forwarded_for(headers: &HeaderMap) -> Option<IpAddr> {
+pub fn maybe_x_forwarded_for(headers: &HeaderMap) -> Option<Box<str>> {
     headers
         .get(X_FORWARDED_FOR)
         .and_then(header_value_to_str)
@@ -17,23 +15,22 @@ pub fn maybe_x_forwarded_for(headers: &HeaderMap) -> Option<IpAddr> {
             header
                 .split(',')
                 .map(str::trim)
-                .filter(|&header_parts| !header_parts.is_empty())
-                .find_map(|part| part.parse().ok())
+                .find_map(|header_parts| (!header_parts.is_empty()).then(|| header_parts.into()))
         })
 }
 
 /// Tries to parse the `x-real-ip` header
 #[inline]
-pub fn maybe_x_real_ip(headers: &HeaderMap) -> Option<IpAddr> {
+pub fn maybe_x_real_ip(headers: &HeaderMap) -> Option<Box<str>> {
     headers
         .get(X_REAL_IP)
         .and_then(header_value_to_str)
-        .and_then(|header| header.trim().parse().ok())
+        .map(|header| header.trim().into())
 }
 
 /// Tries to parse `forwarded` headers
 #[inline]
-pub fn maybe_forwarded_for(headers: &HeaderMap) -> Option<IpAddr> {
+pub fn maybe_forwarded_for(headers: &HeaderMap) -> Option<Box<str>> {
     headers.get_all(FORWARDED).iter().find_map(|header| {
         header_value_to_str(header).and_then(|header| {
             header

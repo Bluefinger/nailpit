@@ -57,7 +57,7 @@ async fn generated(
 pub fn nail_app(state: ServerState) -> Router {
     let rate_limiting = state.config.rate_limiting.clone();
     let spicy_payload = state.spicy_payloads.get();
-    let tracing_support = state.config.open_telemetry.traces;
+    let tracing_support = state.config.open_telemetry.traces || state.config.open_telemetry.logs;
 
     nail_route(state)
         .layer(
