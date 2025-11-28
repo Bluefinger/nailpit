@@ -1,5 +1,6 @@
 mod futures;
 mod modes;
+mod scheduler;
 
 use std::{
     sync::{Arc, LazyLock},
@@ -8,53 +9,16 @@ use std::{
 
 use axum::{body::Body, extract::Request, response::Response};
 use futures::NailedResponseFuture;
-use futures_lite::future::Boxed;
 
-use hyper::HeaderMap;
 use modes::LimitModes;
-use nailbox::boxed_future_within;
 use nailconfig::RateLimitingConfig;
 use nailip::IdentifiedPeer;
 use nailspicy::{SpicyPayloadKind, SpicyPayloads};
-use parking_lot::Mutex;
 use rapidhash::quality::RandomState;
 use scc::HashMap;
-use tokio::time::sleep;
 use tracing_futures::{Instrument, Instrumented};
 
 const PEER_TIMEOUT: Duration = Duration::from_secs(60 * 2);
-
-struct Scheduler {
-    value: Mutex<Option<Instant>>,
-}
-
-impl Scheduler {
-    const fn new() -> Self {
-        Self {
-            value: Mutex::new(None),
-        }
-    }
-
-    #[inline]
-    fn schedule<F, T>(&self, task: F) -> Option<T>
-    where
-        F: Fn() -> T,
-    {
-        let mut inner = self.value.lock();
-        let elapsed = inner.get_or_insert_with(Instant::now).elapsed();
-
-        if elapsed >= PEER_TIMEOUT {
-            inner.take();
-            drop(inner);
-
-            Some(task())
-        } else {
-            None
-        }
-    }
-}
-
-static PRUNING_SCHEDULER: Scheduler = Scheduler::new();
 
 static PEERS: LazyLock<HashMap<IdentifiedPeer, PeerRecord, RandomState>> =
     LazyLock::new(Default::default);
@@ -122,61 +86,16 @@ impl<S> NailRater<S> {
             inner,
         }
     }
-
-    #[inline]
-    #[cfg_attr(
-        feature = "detailed_traces",
-        tracing::instrument(level = "trace", skip_all)
-    )]
-    fn track_visiting_peer(
-        &self,
-        proxied: &IdentifiedPeer,
-        headers: &HeaderMap,
-    ) -> (PeerState, Option<SpicyPayloadKind>) {
-        let peer = PEERS
-            .entry_sync(proxied.clone())
-            .and_modify(|p| {
-                p.count += 1;
-                p.last_seen = Instant::now();
-                p.state = self.mode.limit(&p.count);
-            })
-            .or_insert_with(|| {
-                tracing::info!("remote.peer" = %proxied, "New remote peer");
-                PeerRecord {
-                    count: 1,
-                    state: self.mode.limit(&1),
-                    last_seen: Instant::now(),
-                    supports_spicy: SpicyPayloadKind::accepts_encoding(headers),
-                }
-            });
-
-        (peer.state, peer.supports_spicy)
-    }
-
-    #[inline]
-    #[cfg_attr(
-        feature = "detailed_traces",
-        tracing::instrument(name = "prune_old_peers", level = "trace", skip_all)
-    )]
-    fn prune() -> Boxed<()> {
-        boxed_future_within(async move || {
-            tracing::trace!("PRUNING STARTED");
-
-            PEERS
-                .retain_async(|_, v| v.last_seen.elapsed() < crate::PEER_TIMEOUT)
-                .await
-        })
-    }
 }
 
-impl<S, ReqBody> tower::Service<Request<ReqBody>> for NailRater<S>
+impl<S> tower::Service<Request> for NailRater<S>
 where
-    S: tower::Service<Request<ReqBody>, Response = Response<Body>> + Send + 'static,
+    S: tower::Service<Request, Response = Response<Body>> + Clone + Send + 'static,
     S::Future: Send + 'static,
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future = Instrumented<NailedResponseFuture<S::Future>>;
+    type Future = Instrumented<NailedResponseFuture<S, S::Future>>;
 
     #[inline]
     fn poll_ready(
@@ -187,36 +106,15 @@ where
     }
 
     #[tracing::instrument(name = "rate_limiter", skip_all)]
-    fn call(&mut self, req: Request<ReqBody>) -> Self::Future {
-        let Some(proxied) = req.extensions().get::<IdentifiedPeer>() else {
+    fn call(&mut self, req: Request) -> Self::Future {
+        let Some(proxied) = req.extensions().get::<IdentifiedPeer>().cloned() else {
             return NailedResponseFuture::error().in_current_span();
         };
 
-        let (peer_state, supports_spicy) = self.track_visiting_peer(proxied, req.headers());
+        let cloned = self.inner.clone();
+        let ready_inner = core::mem::replace(&mut self.inner, cloned);
 
-        let delay = match peer_state {
-            PeerState::Ready => None,
-            PeerState::Delay(delay) => Some(boxed_future_within(|| sleep(delay))),
-            PeerState::SpicyDrop => {
-                return self
-                    .spicy_payload
-                    .as_deref()
-                    .zip(supports_spicy)
-                    .and_then(|(payloads, kind)| {
-                        payloads.get(&kind).map(|payload| (payload.clone(), kind))
-                    })
-                    .map_or_else(NailedResponseFuture::dropped, |(payload, kind)| {
-                        NailedResponseFuture::spicy(payload, kind)
-                    })
-                    .in_current_span();
-            }
-            _ => return NailedResponseFuture::dropped().in_current_span(),
-        };
-
-        let prune = PRUNING_SCHEDULER.schedule(Self::prune);
-
-        let inner = self.inner.call(req);
-
-        NailedResponseFuture::normal(prune, delay, inner).in_current_span()
+        NailedResponseFuture::rate_peer(proxied, self.spicy_payload.clone(), self.mode, req, ready_inner)
+            .in_current_span()
     }
 }
