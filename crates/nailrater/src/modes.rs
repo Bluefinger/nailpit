@@ -4,7 +4,7 @@ use nailconfig::{DropBehavior, RateLimitingConfig};
 
 use crate::PeerState;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LimitModes {
     None,
     Soft {

@@ -107,14 +107,19 @@ where
 
     #[tracing::instrument(name = "rate_limiter", skip_all)]
     fn call(&mut self, req: Request) -> Self::Future {
-        let Some(proxied) = req.extensions().get::<IdentifiedPeer>().cloned() else {
+        let Some(proxied) = req.extensions().get::<IdentifiedPeer>() else {
             return NailedResponseFuture::error().in_current_span();
         };
 
         let cloned = self.inner.clone();
         let ready_inner = core::mem::replace(&mut self.inner, cloned);
 
-        NailedResponseFuture::rate_peer(proxied, self.spicy_payload.clone(), self.mode, req, ready_inner)
-            .in_current_span()
+        NailedResponseFuture::rate_peer(
+            proxied.clone(),
+            self.spicy_payload.clone(),
+            self.mode.clone(),
+            req,
+            ready_inner,
+        ).instrument(tracing::info_span!("rate_peer"))
     }
 }

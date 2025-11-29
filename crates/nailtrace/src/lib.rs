@@ -74,12 +74,15 @@ pub async fn trace_connection_layer(
 
     let root_name = format!("{http_method} {path}");
 
+    let mut peer = identified.peer().split(":");
+
     let span = info_span!(
         "HTTP request",
         http.request.method = %http_method,
         http.route = path, // to set by router of "webframework" after
         network.protocol.version = %http_flavor(req.version()),
-        client.address = identified.peer(),
+        client.address = Empty,
+        client.port = Empty,
         user_agent.original = headers
             .get(USER_AGENT)
             .and_then(header_value_to_str)
@@ -97,6 +100,14 @@ pub async fn trace_connection_layer(
         http.request.header.request_id = Empty, // to set
         error.type = Empty,
     );
+
+    if let Some(address) = peer.next() {
+        span.record("client.address", address);
+    }
+
+    if let Some(port) = peer.next() {
+        span.record("client.port", port);
+    }
 
     if let Some(request_id) = header_value_to_str(&request_id) {
         span.record("http.request.header.request_id", request_id);
