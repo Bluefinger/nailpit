@@ -1,35 +1,50 @@
-use std::{
+use core::{
     pin::Pin,
     task::{Context, Poll},
 };
+use std::{sync::Arc, time::Instant};
 
 use axum::{
     body::{Body, Bytes},
+    extract::Request,
     http::HeaderValue,
     response::{IntoResponse, Response},
 };
-use futures_lite::{future::Boxed, ready};
+use futures_lite::{FutureExt, future::Boxed, ready};
 use hyper::{
     StatusCode,
     header::{CONTENT_ENCODING, CONTENT_TYPE},
 };
-use nailspicy::SpicyPayloadKind;
+use nailbox::boxed_future_within;
+use nailip::IdentifiedPeer;
+use nailspicy::{SpicyPayloadKind, SpicyPayloads};
 use pin_project_lite::pin_project;
-use tokio::time::Sleep;
+use rapidhash::quality::RandomState;
+use scc::hash_map::Entry;
+use tokio::time::{Sleep, sleep};
+
+use crate::{PEERS, PeerRecord, PeerState, modes::LimitModes, scheduler::PRUNING_SCHEDULER};
 
 pin_project! {
-    pub struct NailedResponseFuture<T> {
+    pub struct NailedResponseFuture<S, F> {
         #[pin]
-        state: NailedState<T>,
+        state: NailedState<S, F>,
     }
 }
 
 pin_project! {
     #[project = NailedStateProj]
-    enum NailedState<T> {
+    enum NailedState<S, F> {
+        RatePeer {
+            req: Option<Request>,
+            spicy_payloads: Option<Arc<SpicyPayloads>>,
+            mode: LimitModes,
+            entry: Boxed<Entry<'static, IdentifiedPeer, PeerRecord, RandomState>>,
+            inner: S,
+        },
         Normal {
             #[pin]
-            state: NailedNormalFuture<T>,
+            state: NailedNormalFuture<F>,
         },
         Other {
             state: NailedOtherState,
@@ -60,6 +75,17 @@ pin_project! {
     }
 }
 
+impl NormalState {
+    #[inline]
+    fn new(prune: Option<Boxed<()>>, delay: Option<Pin<Box<Sleep>>>) -> Self {
+        match (prune, delay) {
+            (Some(prune), delay) => NormalState::Prune { prune, delay },
+            (None, Some(delay)) => NormalState::Delay { delay },
+            (None, None) => NormalState::Pass,
+        }
+    }
+}
+
 enum NailedOtherState {
     Dropped,
     Spicy {
@@ -70,47 +96,37 @@ enum NailedOtherState {
     Finished,
 }
 
-impl<T> NailedResponseFuture<T> {
-    #[inline]
-    pub fn normal(prune: Option<Boxed<()>>, delay: Option<Pin<Box<Sleep>>>, inner: T) -> Self {
-        let fut = match (prune, delay) {
-            (Some(prune), delay) => NailedState::Normal {
-                state: NailedNormalFuture {
-                    state: NormalState::Prune { prune, delay },
-                    inner,
-                },
-            },
-            (None, Some(delay)) => NailedState::Normal {
-                state: NailedNormalFuture {
-                    state: NormalState::Delay { delay },
-                    inner,
-                },
-            },
-            (None, None) => NailedState::Normal {
-                state: NailedNormalFuture {
-                    state: NormalState::Pass,
-                    inner,
-                },
-            },
-        };
+#[inline]
+#[cfg_attr(
+    feature = "detailed_traces",
+    tracing::instrument(name = "prune_old_peers", level = "trace", skip_all)
+)]
+fn prune() -> Boxed<()> {
+    boxed_future_within(async move || {
+        tracing::trace!("PRUNING STARTED");
 
-        Self { state: fut }
-    }
+        PEERS
+            .retain_async(|_, v| v.last_seen.elapsed() < crate::PEER_TIMEOUT)
+            .await
+    })
+}
 
+impl<S, T> NailedResponseFuture<S, T> {
     #[inline]
-    pub fn dropped() -> Self {
+    pub fn rate_peer(
+        peer: IdentifiedPeer,
+        spicy_payloads: Option<Arc<SpicyPayloads>>,
+        mode: LimitModes,
+        req: Request,
+        inner: S,
+    ) -> Self {
         Self {
-            state: NailedState::Other {
-                state: NailedOtherState::Dropped,
-            },
-        }
-    }
-
-    #[inline]
-    pub fn spicy(payload: Bytes, kind: SpicyPayloadKind) -> Self {
-        Self {
-            state: NailedState::Other {
-                state: NailedOtherState::Spicy { payload, kind },
+            state: NailedState::RatePeer {
+                req: Some(req),
+                mode,
+                spicy_payloads,
+                entry: boxed_future_within(|| PEERS.entry_async(peer)),
+                inner,
             },
         }
     }
@@ -125,17 +141,91 @@ impl<T> NailedResponseFuture<T> {
     }
 }
 
-impl<E, F> Future for NailedResponseFuture<F>
+impl<E, F, S> Future for NailedResponseFuture<S, F>
 where
     F: Future<Output = Result<Response<Body>, E>>,
+    S: tower::Service<Request, Response = Response<Body>, Future = F> + Send + 'static,
+    S::Future: Send + 'static,
 {
     type Output = Result<Response<Body>, E>;
 
     #[inline]
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match self.project().state.project() {
-            NailedStateProj::Normal { state } => state.poll(cx),
-            NailedStateProj::Other { state } => Poll::Ready(Ok(state.build_response())),
+        let mut state = self.project().state;
+
+        loop {
+            match state.as_mut().project() {
+                NailedStateProj::RatePeer {
+                    req,
+                    spicy_payloads,
+                    mode,
+                    entry,
+                    inner,
+                } => {
+                    let entry = ready!(entry.poll(cx));
+                    let req = req.take().unwrap(); // If this panics, it is because the future was polled twice in the wrong state.
+                    let peer = entry
+                        .and_modify(|p| {
+                            p.count += 1;
+                            p.last_seen = Instant::now();
+                            p.state = mode.limit(&p.count);
+                        })
+                        .or_insert_with_key(|proxied| {
+                            tracing::info!("remote.peer" = %proxied, "New remote peer");
+                            PeerRecord {
+                                count: 1,
+                                state: mode.limit(&1),
+                                last_seen: Instant::now(),
+                                supports_spicy: SpicyPayloadKind::accepts_encoding(req.headers()),
+                            }
+                        });
+
+                    let delay = match peer.state {
+                        PeerState::Ready => None,
+                        PeerState::Delay(delay) => Some(boxed_future_within(|| sleep(delay))),
+                        PeerState::SpicyDrop => {
+                            let new_state = spicy_payloads
+                                .as_deref()
+                                .zip(peer.supports_spicy)
+                                .and_then(|(payloads, kind)| {
+                                    payloads.get(&kind).map(|payload| (payload.clone(), kind))
+                                })
+                                .map_or_else(
+                                    || NailedState::Other {
+                                        state: NailedOtherState::Dropped,
+                                    },
+                                    |(payload, kind)| NailedState::Other {
+                                        state: NailedOtherState::Spicy { payload, kind },
+                                    },
+                                );
+
+                            state.set(new_state);
+
+                            continue;
+                        }
+                        _ => {
+                            state.set(NailedState::Other {
+                                state: NailedOtherState::Dropped,
+                            });
+
+                            continue;
+                        }
+                    };
+
+                    let prune = PRUNING_SCHEDULER.schedule(prune);
+
+                    let inner = inner.call(req);
+
+                    state.set(NailedState::Normal {
+                        state: NailedNormalFuture {
+                            state: NormalState::new(prune, delay),
+                            inner,
+                        },
+                    });
+                }
+                NailedStateProj::Normal { state } => return state.poll(cx),
+                NailedStateProj::Other { state } => return Poll::Ready(Ok(state.build_response())),
+            }
         }
     }
 }

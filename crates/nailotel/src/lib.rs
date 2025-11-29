@@ -35,12 +35,16 @@ pub struct OtelGuard {
 
 impl Drop for OtelGuard {
     fn drop(&mut self) {
-        self.otel_logger
-            .take()
-            .map(|logs_provider| logs_provider.shutdown());
-        self.otel_traces
-            .take()
-            .map(|trace_provider| trace_provider.shutdown());
+        if let Some(logs_provider) = self.otel_logger.take()
+            && let Err(e) = logs_provider.shutdown()
+        {
+            tracing::error!(error = %e, "Error shutting down Logs Provider");
+        }
+        if let Some(trace_provider) = self.otel_traces.take()
+            && let Err(e) = trace_provider.shutdown()
+        {
+            tracing::error!(error = %e, "Error shutting down Trace Provider");
+        }
     }
 }
 
