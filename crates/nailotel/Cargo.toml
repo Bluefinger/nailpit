@@ -19,7 +19,9 @@ opentelemetry.workspace = true
 opentelemetry-otlp.workspace = true
 opentelemetry_sdk.workspace = true
 opentelemetry-semantic-conventions.workspace = true
-opentelemetry-appender-tracing = "0.31"
+opentelemetry-appender-tracing = { version = "0.31", features = [
+    "experimental_metadata_attributes",
+] }
 
 [lints]
 workspace = true
