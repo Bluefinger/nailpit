@@ -11,35 +11,34 @@ use tokio_util::sync::CancellationToken;
 use tower::ServiceExt;
 
 async fn server_loop(
-    listener: &TcpListener,
-    app: &Router,
-    server: &Builder<TokioExecutor>,
+    listener: TcpListener,
+    app: Router,
     graceful: &GracefulShutdown,
-) -> color_eyre::Result<bool> {
-    let (socket, remote_addr) = listener.accept().await?;
+) -> color_eyre::Result<()> {
+    let server = Builder::new(TokioExecutor::new());
 
-    let tower_service = app.clone();
+    loop {
+        let (socket, remote_addr) = listener.accept().await?;
 
-    let socket = TokioIo::new(socket);
+        let tower_service = app.clone();
 
-    let hyper_service = hyper::service::service_fn(move |mut request: Request<Incoming>| {
-        let peer = IdentifiedPeer::extract(request.headers(), remote_addr);
-        request.extensions_mut().insert(peer);
-        tower_service.clone().oneshot(request)
-    });
+        let socket = TokioIo::new(socket);
 
-    let conn = server.serve_connection(socket, hyper_service);
+        let hyper_service = hyper::service::service_fn(move |mut request: Request<Incoming>| {
+            let peer = IdentifiedPeer::extract(request.headers(), remote_addr);
+            request.extensions_mut().insert(peer);
+            tower_service.clone().oneshot(request)
+        });
 
-    let conn = graceful.watch(conn.into_owned());
+        let conn = server.serve_connection(socket, hyper_service);
 
-    tokio::spawn(conn);
-
-    Ok(false)
+        tokio::spawn(graceful.watch(conn.into_owned()));
+    }
 }
 
-async fn cancel_loop(shutdown: &CancellationToken) -> color_eyre::Result<bool> {
-    shutdown.cancelled().await;
-    Ok(true)
+async fn cancel_loop(token: CancellationToken) -> color_eyre::Result<()> {
+    token.cancelled().await;
+    Ok(())
 }
 
 /// Serves an Axum [`Router`] app with `hyper`, taking a [`CancellationToken`] to do a graceful shutdown
@@ -47,24 +46,13 @@ async fn cancel_loop(shutdown: &CancellationToken) -> color_eyre::Result<bool> {
 pub async fn serve(
     listener: TcpListener,
     app: Router,
-    shutdown: CancellationToken,
+    token: CancellationToken,
 ) -> color_eyre::Result<()> {
-    let server = Builder::new(TokioExecutor::new());
     let graceful = GracefulShutdown::new();
 
-    loop {
-        let cancelled = (
-            server_loop(&listener, &app, &server, &graceful),
-            cancel_loop(&shutdown),
-        )
-            .race()
-            .await?;
-
-        if cancelled {
-            drop(listener);
-            break;
-        }
-    }
+    (server_loop(listener, app, &graceful), cancel_loop(token))
+        .race()
+        .await?;
 
     graceful.shutdown().await;
 
