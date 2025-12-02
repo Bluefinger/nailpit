@@ -28,6 +28,25 @@ docker run -v ./configuration/:/app/configuration -v ./input/:/app/input -p 3001
 
 The socket `nailpit` listens to can be overridden with `-e NAILPIT_SOCKET=0.0.0.0:3001`, and it expects the full ip:port string. There's three volumes to be configured, one for `/app/configuration` which is where the default config file lives and will be where your override config file will live, one for `/app/input` which is where the user's input files are located, and the last `/app/templates` for user provided template overrides.
 
+#### Docker Compose
+
+`nailpit` images are available from docker hub via [`docker.io/sachymetsu/nailpit:latest`](https://hub.docker.com/r/sachymetsu/nailpit). Right now, only the latest tag is provided, but these should be stable enough. Using `nailpit` with docker compose can be done with the following example configuration:
+
+```yml
+services:
+  nailpit:
+    container_name: nailpit
+    image: docker.io/sachymetsu/nailpit:latest
+    restart: unless-stopped
+    volumes:
+      - /home/user/nailpit/configuration:/app/configuration
+      - /home/user/nailpit/input:/app/input
+      - /home/user/nailpit/templates:/app/templates
+    network_mode: host
+```
+
+Images are currently provided for `linux/amd64` and `linux/arm64` platforms.
+
 ### Configuration
 
 All of the configuration options are documented in the default config file found [here](./configuration/pit.default.toml). To create your own configuration, create a `pit.toml` file in the configuration folder and add just the configuration options you want to override.
