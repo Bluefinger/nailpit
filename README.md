@@ -49,7 +49,7 @@ Images are currently provided for `linux/amd64` and `linux/arm64` platforms.
 
 ### Configuration
 
-All of the configuration options are documented in the default config file found [here](./configuration/pit.default.toml). To create your own configuration, create a `pit.toml` file in the configuration folder and add just the configuration options you want to override.
+All of the configuration options are documented in the default config file found [here](./defaults/pit.default.toml). To create your own configuration, create a `pit.toml` file in the configuration folder and add just the configuration options you want to override.
 
 ## How to contribute
 
