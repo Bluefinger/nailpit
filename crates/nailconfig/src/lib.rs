@@ -5,7 +5,7 @@
 use core::num::NonZero;
 use std::{ops::Deref, sync::Arc};
 
-use color_eyre::Result;
+use color_eyre::{Result, eyre::Context};
 use nailbox::try_arc_within;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -125,9 +125,11 @@ pub fn get_configuration() -> Result<Arc<NailConfig>> {
                 .format(config::FileFormat::Toml),
         )
         .set_override_option("server.socket_addr", socket_addr)?
-        .build()?;
+        .build()
+        .context("Unable to read configuration files")?;
 
-    let config = try_arc_within(|| config.try_deserialize())?;
+    let config = try_arc_within(|| config.try_deserialize())
+        .context("Failed to load configuration. Maybe the format is invalid")?;
 
     Ok(config)
 }

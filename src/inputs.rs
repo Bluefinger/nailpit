@@ -1,9 +1,10 @@
 use std::{fs::read_to_string, sync::Arc};
 
+use color_eyre::eyre::Context;
 use glob::glob;
 use nailbox::{arc_within, try_arc_within};
 use nailconfig::NailConfig;
-use nailgen::{GeneratedTemplate, MarkovGen, TemplateError, WarningTemplate};
+use nailgen::{GeneratedTemplate, MarkovGen, WarningTemplate};
 use nailkov::interner::Interner;
 use nailstate::Templates;
 
@@ -37,15 +38,18 @@ pub fn get_input_files(
 
 pub fn get_template_files(config: &NailConfig) -> color_eyre::Result<Arc<Templates>> {
     let (index, content) = (
-        read_to_string(&config.generator.warning_template)?,
-        read_to_string(&config.generator.warning_message)?,
+        read_to_string(&config.generator.warning_template).context("Missing Warning Template")?,
+        read_to_string(&config.generator.warning_message).context("Missing Warning Message")?,
     );
-    let generated = read_to_string(&config.generator.generated_template)?;
+    let generated = read_to_string(&config.generator.generated_template)
+        .context("Missing Generated Template")?;
 
-    let templates = try_arc_within(|| -> Result<Templates, TemplateError> {
+    let templates = try_arc_within(|| -> color_eyre::Result<Templates> {
         Ok(Templates {
-            warning: WarningTemplate::init(index.into(), content.into())?,
-            generated: GeneratedTemplate::init(generated.into())?,
+            warning: WarningTemplate::init(index.into(), content.into()).context(
+                "Warning Template should only contain title, main and footer placeholders"
+            )?,
+            generated: GeneratedTemplate::init(generated.into()).context("Generated template contains invalid placeholders, should only contain title, initial, main, extra and footer placeholders")?,
         })
     })?;
 
