@@ -1,5 +1,11 @@
 # Nailpit
 
+---
+
+**ATTENTION**: This project is moving home. Since I no longer want my (active) personal projects on Github, I'm taking the advice of the now former Github CEO's ["Embrace AI or get out!"](https://www.businessinsider.com/github-ceo-developers-embrace-ai-or-get-out-2025-8) and opting to leave. From now on, [all dev work will be conducted here](https://tangled.org/sachy.dev/nailpit), and this repo will be deactivated in time. 
+
+---
+
 Send Malicious Scrapers into an equally malicious tarpit with added rusty nails. Nailpit is an exercise in offensive security, in which malicious actors (in this case, web scrapers) are targeted and have their resources wasted/attacked. The purpose is to use this against scrapers that *ignore* one's `robots.txt` file and any `Disallow` directives, particularly ones that try to scrape private/non-public sections of one's websites/services. In doing so and with enough volume, such scrapers can constitute an effective DoS attack. *This is bad*. Therefore, this project aims to contribute another tool in making sure such misbehaving scrapers are discouraged from targeting your website by inundating them with garbage and poisoned content.
 
 ## Disclaimer
